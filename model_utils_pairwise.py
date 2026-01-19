@@ -4,7 +4,7 @@ import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 import torch
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, matthews_corrcoef
 
 def compute_embeddings_and_similarity(model, df, batch_size=16):
     print("Building unique concept set...")
@@ -29,8 +29,8 @@ def compute_embeddings_and_similarity(model, df, batch_size=16):
 
 def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 1.00, 0.01)):
     print(f"\n--- Results per Threshold ({model_name}) ---")
-    print(f"{'Threshold':<10} | {'F1':<10} | {'Precision':<10} | {'Recall':<10} | {'PosAcc':<10} | {'NegAcc':<10}")
-    print("-" * 80)
+    print(f"{'Threshold':<10} | {'F1':<10} | {'Precision':<10} | {'Recall':<10} | {'PosAcc':<10} | {'NegAcc':<10} | {'MCC':<10}")
+    print("-" * 95)
 
     current_model_results = []
     best_f1_model = -1
@@ -42,6 +42,7 @@ def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 
         p = precision_score(labels, preds, zero_division=0)
         r = recall_score(labels, preds, zero_division=0)
         f1 = f1_score(labels, preds, zero_division=0)
+        mcc = matthews_corrcoef(labels, preds) if len(set(preds)) > 1 else 0.0
         
         pos_mask = (labels == 1)
         neg_mask = (labels == 0)
@@ -60,11 +61,12 @@ def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 
             'recall_mean': r, 'recall_var': 0.0,
             'f1_mean': f1, 'f1_var': 0.0,
             'pos_acc_mean': pos_acc,
-            'neg_acc_mean': neg_acc
+            'neg_acc_mean': neg_acc,
+            'mcc': mcc
         }
         current_model_results.append(result_entry)
         
-        print(f"{t:.2f}       | {f1:.4f}     | {p:.4f}     | {r:.4f}     | {pos_acc:.4f}     | {neg_acc:.4f}")
+        print(f"{t:.2f}       | {f1:.4f}     | {p:.4f}     | {r:.4f}     | {pos_acc:.4f}     | {neg_acc:.4f}     | {mcc:.4f}")
         
     return current_model_results, best_threshold_model
 
