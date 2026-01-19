@@ -147,6 +147,44 @@ def get_all_descendants(uri, concepts, visited=None):
     return descendants
 
 
+def find_shortest_path(uri1, uri2, concepts):
+    """
+    Find the shortest path between two concepts in the hierarchy.
+    Uses BFS on the undirected graph of broader/narrower relationships.
+    Returns the path length, or -1 if no path exists.
+    """
+    if uri1 == uri2:
+        return 0
+    
+    if uri1 not in concepts or uri2 not in concepts:
+        return -1
+    
+    # BFS
+    from collections import deque
+    
+    visited = {uri1}
+    queue = deque([(uri1, 0)])
+    
+    while queue:
+        current, dist = queue.popleft()
+        
+        # Get all neighbors (both broader and narrower)
+        neighbors = []
+        if current in concepts:
+            neighbors.extend(concepts[current]['broader'])
+            neighbors.extend(concepts[current]['narrower'])
+        
+        for neighbor in neighbors:
+            if neighbor == uri2:
+                return dist + 1
+            
+            if neighbor not in visited and neighbor in concepts:
+                visited.add(neighbor)
+                queue.append((neighbor, dist + 1))
+    
+    return -1  # No path found
+
+
 def build_exclusion_sets(concepts):
     """Build exclusion sets: self + ancestors + descendants."""
     exclusions = {}
@@ -259,7 +297,8 @@ def generate_positive_pairs(concept_uris, concepts):
                 'term2': alt,
                 'concept': pref_label,
                 'concept_uri': uri,
-                'label': 1
+                'label': 1,
+                'shortest_path': 0  # Same concept
             })
         
         # 2. Pair altLabels with each other
@@ -270,7 +309,8 @@ def generate_positive_pairs(concept_uris, concepts):
                     'term2': alt_labels[j],
                     'concept': pref_label,
                     'concept_uri': uri,
-                    'label': 1
+                    'label': 1,
+                    'shortest_path': 0  # Same concept
                 })
     
     return pairs
@@ -300,12 +340,16 @@ def generate_negative_pairs(concept_uris, concepts, exclusion_sets):
             
             label2 = concepts[uri2]['prefLabel']
             
+            # Calculate shortest path between the two concepts
+            path_length = find_shortest_path(uri1, uri2, concepts)
+            
             pairs.append({
                 'term1': label1,
                 'term2': label2,
                 'concept1_uri': uri1,
                 'concept2_uri': uri2,
-                'label': 0
+                'label': 0,
+                'shortest_path': path_length
             })
     
     return pairs

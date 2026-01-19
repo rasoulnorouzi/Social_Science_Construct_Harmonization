@@ -43,5 +43,12 @@ MODELS = {
 # Thresholds: Range of cosine similarity thresholds to test
 THRESHOLDS = np.arange(0.10, 1.00, 0.01)
 
+# Clustering Parameters (HDBSCAN & UMAP)
+CLUSTERING_PARAMS = {
+    'min_cluster_sizes': range(2, 12),
+    'min_samples': range(2, 12),
+    'umap_n_components': [None, 2, 5, 10, 20, 50] # Dimensionality reduction target (None = Original)
+}
+
 # Batch size for encoding
 BATCH_SIZE = 16
