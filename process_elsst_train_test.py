@@ -1,504 +1,539 @@
 """
-ELSST RDF Data Processing - Train/Test Split
-=============================================
-This script processes the ELSST thesaurus data to create train and test datasets
-with positive and negative concept pairs.
-
-- Train set: 70% of concepts
-- Test set: 30% of concepts (completely different from train)
-- Positive pairs: Entry terms (altLabels) of the same concept
-- Negative pairs: Unrelated concepts (no hierarchical relationship)
-
-IMPORTANT RULES:
-1. A concept cannot pair with itself
-2. Concepts with parent/ancestor relationship cannot be negative pairs
-3. Test concepts are completely separate from train concepts
-4. Reproducible with fixed random seed
+ELSST RDF -> Train/Test synonym pairs (+ taxonomy-safe negatives)
+==============================================================
+OPTIMIZED VERSION
+- Speed improvements: Integer IDs, Vectorized Parsing, SSSP BFS.
+- Stability: Sorts URIs and Labels to ensure deterministic Train/Test splits.
 """
 
-import xml.etree.ElementTree as ET
-import random
-import csv
-import os
+from __future__ import annotations
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
+import os
+import csv
+import random
+import gc
+from dataclasses import dataclass, field
+from collections import defaultdict, deque
+from typing import Dict, List, Set, Tuple, Optional, Iterable
+
+from rdflib import Graph, Namespace
+from rdflib.term import URIRef, Literal
+
+# Progress bar
+from tqdm import tqdm
+
+# =========================
+# CONFIG
+# =========================
 
 RDF_FILE_PATH = "datasets/raw_datasets/ELSST_R5.rdf"
 OUTPUT_DIR = "datasets/processed_datasets"
+
 LANGUAGE = "en"
 RANDOM_SEED = 42
 TRAIN_RATIO = 0.70
 
-# ============================================================================
-# NAMESPACES
-# ============================================================================
+# Negatives can explode quadratically.
+GENERATE_ALL_NEGATIVES = True
+NEGATIVE_SAMPLES_PER_CONCEPT = 50  # used only if GENERATE_ALL_NEGATIVES=False
 
-NAMESPACES = {
-    'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-    'skos': 'http://www.w3.org/2004/02/skos/core#',
-}
+# If True, negatives will also exclude "skos:related" links.
+EXCLUDE_SKOS_RELATED_FROM_NEGATIVES = False
 
+# Batch size for writing to CSV to save memory
+WRITE_BATCH_SIZE = 50000
 
-# ============================================================================
-# PARSING FUNCTIONS
-# ============================================================================
+# =========================
+# RDF / SKOS NAMESPACES
+# =========================
 
-def parse_rdf_file(file_path):
-    """Parse the RDF file."""
-    print(f"Parsing: {file_path}")
-    tree = ET.parse(file_path)
-    return tree.getroot()
+SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
+RDF  = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
 
+# =========================
+# DATA STRUCTURES
+# =========================
 
-def extract_concepts(root):
-    """Extract all SKOS concepts with English labels."""
-    concepts = {}
-    
-    for desc in root.findall('.//rdf:Description', NAMESPACES):
-        uri = desc.get(f'{{{NAMESPACES["rdf"]}}}about')
-        if not uri:
-            continue
-        
-        # Check if SKOS Concept
-        type_elem = desc.find('rdf:type', NAMESPACES)
-        if type_elem is None:
-            continue
-        type_res = type_elem.get(f'{{{NAMESPACES["rdf"]}}}resource')
-        if type_res != 'http://www.w3.org/2004/02/skos/core#Concept':
-            continue
-        
-        concept = {
-            'prefLabel': None,
-            'altLabels': [],
-            'broader': [],
-            'narrower': []
-        }
-        
-        # Get prefLabel
-        for pref in desc.findall('skos:prefLabel', NAMESPACES):
-            lang = pref.get('{http://www.w3.org/XML/1998/namespace}lang')
-            if lang == LANGUAGE and pref.text:
-                concept['prefLabel'] = pref.text
-                break
-        
-        # Get altLabels
-        for alt in desc.findall('skos:altLabel', NAMESPACES):
-            lang = alt.get('{http://www.w3.org/XML/1998/namespace}lang')
-            if lang == LANGUAGE and alt.text:
-                concept['altLabels'].append(alt.text)
-        
-        # Get broader (parents)
-        for broader in desc.findall('skos:broader', NAMESPACES):
-            parent_uri = broader.get(f'{{{NAMESPACES["rdf"]}}}resource')
-            if parent_uri:
-                concept['broader'].append(parent_uri)
-        
-        # Get narrower (children)
-        for narrower in desc.findall('skos:narrower', NAMESPACES):
-            child_uri = narrower.get(f'{{{NAMESPACES["rdf"]}}}resource')
-            if child_uri:
-                concept['narrower'].append(child_uri)
-        
-        if concept['prefLabel']:
-            concepts[uri] = concept
-    
-    return concepts
+# We use Integer IDs internally for speed.
+ConceptID = int
 
+@dataclass
+class ConceptData:
+    uri: str
+    pref: str
+    alts: List[str]
+    # We store relations as lists of integer IDs
+    broader: List[ConceptID] = field(default_factory=list)
+    narrower: List[ConceptID] = field(default_factory=list)
+    related: List[ConceptID] = field(default_factory=list)
 
-# ============================================================================
-# HIERARCHY FUNCTIONS
-# ============================================================================
+# =========================
+# OPTIMIZED PARSING
+# =========================
 
-def get_all_ancestors(uri, concepts, visited=None):
-    """Get all ancestors of a concept."""
-    if visited is None:
-        visited = set()
-    
-    ancestors = set()
-    if uri in visited or uri not in concepts:
-        return ancestors
-    
-    visited.add(uri)
-    
-    for parent in concepts[uri]['broader']:
-        ancestors.add(parent)
-        ancestors.update(get_all_ancestors(parent, concepts, visited.copy()))
-    
-    return ancestors
-
-
-def get_all_descendants(uri, concepts, visited=None):
-    """Get all descendants of a concept."""
-    if visited is None:
-        visited = set()
-    
-    descendants = set()
-    if uri in visited or uri not in concepts:
-        return descendants
-    
-    visited.add(uri)
-    
-    for child in concepts[uri]['narrower']:
-        descendants.add(child)
-        descendants.update(get_all_descendants(child, concepts, visited.copy()))
-    
-    return descendants
-
-
-def find_shortest_path(uri1, uri2, concepts):
+def load_concepts_optimized(rdf_path: str, lang: str) -> Tuple[List[ConceptData], Dict[int, Set[int]]]:
     """
-    Find the shortest path between two concepts in the hierarchy.
-    Uses BFS on the undirected graph of broader/narrower relationships.
-    Returns the path length, or -1 if no path exists.
+    Parses RDF and returns:
+    1. A list of ConceptData (index = ConceptID)
+    2. An adjacency list (undirected) for shortest path calc: adj[id] = {neighbor_ids}
     """
-    if uri1 == uri2:
-        return 0
-    
-    if uri1 not in concepts or uri2 not in concepts:
-        return -1
-    
-    # BFS
-    from collections import deque
-    
-    visited = {uri1}
-    queue = deque([(uri1, 0)])
-    
-    while queue:
-        current, dist = queue.popleft()
-        
-        # Get all neighbors (both broader and narrower)
-        neighbors = []
-        if current in concepts:
-            neighbors.extend(concepts[current]['broader'])
-            neighbors.extend(concepts[current]['narrower'])
-        
-        for neighbor in neighbors:
-            if neighbor == uri2:
-                return dist + 1
-            
-            if neighbor not in visited and neighbor in concepts:
-                visited.add(neighbor)
-                queue.append((neighbor, dist + 1))
-    
-    return -1  # No path found
+    g = Graph()
+    print("[1/8] Loading RDF into memory...")
+    g.parse(rdf_path)
 
+    print("  Indexing Concept URIs...")
+    # 1. Identify all skos:Concept subjects
+    concept_uris_set = set(g.subjects(RDF.type, SKOS.Concept))
 
-def build_exclusion_sets(concepts):
-    """Build exclusion sets: self + ancestors + descendants."""
-    exclusions = {}
-    for uri in concepts:
-        excluded = {uri}  # Self
-        excluded.update(get_all_ancestors(uri, concepts))
-        excluded.update(get_all_descendants(uri, concepts))
-        exclusions[uri] = excluded
-    return exclusions
+    # Map URI -> Integer ID
+    # Sort for deterministic ID assignment across runs
+    sorted_uris = sorted(list(concept_uris_set))
+    uri_to_id = {u: i for i, u in enumerate(sorted_uris)}
+    id_to_uri = {i: u for i, u in enumerate(sorted_uris)}
+    n_concepts = len(sorted_uris)
 
+    # Initialize storage
+    # Using arrays/lists indexed by ID is faster than dicts
+    prefs: List[Optional[str]] = [None] * n_concepts
+    alts: List[List[str]] = [[] for _ in range(n_concepts)]
+    broader: List[List[int]] = [[] for _ in range(n_concepts)]
+    related: List[List[int]] = [[] for _ in range(n_concepts)]
+    narrower: List[List[int]] = [[] for _ in range(n_concepts)]
 
-# ============================================================================
+    # 2. Vectorized property fetching (Faster than iterating objects per concept)
+    print("  Extracting labels and relations (Vectorized)...")
+
+    # PrefLabels
+    for s, o in g.subject_objects(SKOS.prefLabel):
+        if s in uri_to_id and isinstance(o, Literal) and o.language == lang:
+            # If multiple, logic says pick first found (or overwrite)
+            prefs[uri_to_id[s]] = str(o).strip()
+
+    # AltLabels
+    for s, o in g.subject_objects(SKOS.altLabel):
+        if s in uri_to_id and isinstance(o, Literal) and o.language == lang:
+            txt = str(o).strip()
+            if txt:
+                alts[uri_to_id[s]].append(txt)
+
+    # Broader
+    for s, o in g.subject_objects(SKOS.broader):
+        if s in uri_to_id and o in uri_to_id:
+            src_id = uri_to_id[s]
+            dst_id = uri_to_id[o]
+            broader[src_id].append(dst_id)
+
+    # Related
+    for s, o in g.subject_objects(SKOS.related):
+        if s in uri_to_id and o in uri_to_id:
+            src_id = uri_to_id[s]
+            dst_id = uri_to_id[o]
+            related[src_id].append(dst_id)
+
+    # 3. Derive Narrower (Invert Broader)
+    print("  Deriving narrower relations...")
+    narrower: List[List[int]] = [[] for _ in range(n_concepts)]
+    for child_id in range(n_concepts):
+        for parent_id in broader[child_id]:
+            narrower[parent_id].append(child_id)
+
+    # 4. Build Final Structures
+    valid_ids = [i for i, p in enumerate(prefs) if p is not None]
+
+    final_concepts: List[ConceptData] = []
+    old_id_to_new_id = {}
+
+    for new_idx, old_idx in enumerate(valid_ids):
+        old_id_to_new_id[old_idx] = new_idx
+
+    for old_idx in valid_ids:
+        # Remap relations to new IDs
+        b_new = [old_id_to_new_id[x] for x in broader[old_idx] if x in old_id_to_new_id]
+        n_new = [old_id_to_new_id[x] for x in narrower[old_idx] if x in old_id_to_new_id]
+        r_new = [old_id_to_new_id[x] for x in related[old_idx] if x in old_id_to_new_id]
+
+        # Sort alts to ensure deterministic iteration order for Split logic
+        sorted_alts = sorted(alts[old_idx])
+
+        final_concepts.append(ConceptData(
+            uri=str(id_to_uri[old_idx]),
+            pref=prefs[old_idx], # type: ignore
+            alts=sorted_alts,
+            broader=b_new,
+            narrower=n_new,
+            related=r_new
+        ))
+
+    # 5. Build Undirected Adjacency (for shortest path)
+    # Map: ID -> Set[ID]
+    adj: Dict[int, Set[int]] = defaultdict(set)
+    include_related_in_graph = False # Original logic was False. Set True if you want related links in path calc.
+
+    for idx, c in enumerate(final_concepts):
+        for p in c.broader:
+            adj[idx].add(p)
+            adj[p].add(idx)
+        for ch in c.narrower:
+            adj[idx].add(ch)
+            adj[ch].add(idx)
+
+        if include_related_in_graph:
+            for r in c.related:
+                adj[idx].add(r)
+                adj[r].add(idx)
+
+    # Free memory
+    del g, prefs, alts, broader, narrower, related, uri_to_id, id_to_uri
+    gc.collect()
+
+    return final_concepts, adj
+
+# =========================
+# ANCESTORS / DESCENDANTS (Integer Optimized)
+# =========================
+
+def compute_transitive_closures(concepts: List[ConceptData]) -> Tuple[List[Set[int]], List[Set[int]]]:
+    """
+    Computes ancestors and descendants using memoized DFS on integer IDs.
+    Returns list of sets indexed by ConceptID.
+    """
+    n = len(concepts)
+    ancestors = [None] * n
+    descendants = [None] * n
+
+    # Ancestors
+    def get_ancestors(u: int) -> Set[int]:
+        if ancestors[u] is not None:
+            return ancestors[u]
+
+        out = set()
+        for p in concepts[u].broader:
+            out.add(p)
+            out.update(get_ancestors(p))
+
+        ancestors[u] = out
+        return out
+
+    # Descendants
+    def get_descendants(u: int) -> Set[int]:
+        if descendants[u] is not None:
+            return descendants[u]
+
+        out = set()
+        for ch in concepts[u].narrower:
+            out.add(ch)
+            out.update(get_descendants(ch))
+
+        descendants[u] = out
+        return out
+
+    # Fill all with progress bar
+    for i in tqdm(range(n), desc="  Computing Hierarchy", unit="concept"):
+        get_ancestors(i)
+        get_descendants(i)
+
+    return ancestors, descendants # type: ignore
+
+def build_exclusion_sets(
+    concepts: List[ConceptData],
+    ancestors: List[Set[int]],
+    descendants: List[Set[int]],
+    exclude_related: bool
+) -> List[Set[int]]:
+    n = len(concepts)
+    excl = []
+    for i in range(n):
+        s = {i} # self
+        s.update(ancestors[i])
+        s.update(descendants[i])
+        if exclude_related:
+            s.update(concepts[i].related)
+        excl.append(s)
+    return excl
+
+# =========================
 # TRAIN/TEST SPLIT
-# ============================================================================
+# =========================
 
-def get_all_terms(uri, concepts):
-    """Get all terms (prefLabel + altLabels) for a concept."""
-    terms = {concepts[uri]['prefLabel']}
-    terms.update(concepts[uri]['altLabels'])
-    return terms
+class UnionFind:
+    def __init__(self, size: int):
+        self.parent = list(range(size))
 
+    def find(self, x: int) -> int:
+        path = []
+        root = x
+        while self.parent[root] != root:
+            path.append(root)
+            root = self.parent[root]
+        for node in path:
+            self.parent[node] = root
+        return root
 
-def split_concepts_no_term_overlap(concepts, train_ratio, seed):
-    """
-    Split concepts into train and test sets ensuring NO term overlap.
-    If a term appears in multiple concepts, all those concepts go to the same set.
-    """
+    def union(self, a: int, b: int):
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self.parent[ra] = rb
+
+def split_concepts_no_overlap(
+    concepts: List[ConceptData],
+    ratio: float,
+    seed: int
+) -> Tuple[List[int], List[int]]:
+
     random.seed(seed)
-    
-    # Build term -> concepts mapping
-    term_to_concepts = {}
-    for uri in concepts:
-        for term in get_all_terms(uri, concepts):
-            if term not in term_to_concepts:
-                term_to_concepts[term] = set()
-            term_to_concepts[term].add(uri)
-    
-    # Find concepts that share terms (must stay together)
-    # Use union-find to group concepts
-    parent = {uri: uri for uri in concepts}
-    
-    def find(x):
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-    
-    def union(x, y):
-        px, py = find(x), find(y)
-        if px != py:
-            parent[px] = py
-    
-    # Union concepts that share any term
-    for term, uris in term_to_concepts.items():
-        uri_list = list(uris)
-        for i in range(1, len(uri_list)):
-            union(uri_list[0], uri_list[i])
-    
-    # Group concepts by their root
-    groups = {}
-    for uri in concepts:
-        root = find(uri)
-        if root not in groups:
-            groups[root] = []
-        groups[root].append(uri)
-    
-    # Shuffle groups and split
+    n = len(concepts)
+
+    # Map term -> list of concept IDs
+    # Using sorted concepts ensures iteration order is fixed.
+    term_to_ids = defaultdict(list)
+    for idx, c in enumerate(concepts):
+        # Pref
+        term_to_ids[c.pref].append(idx)
+        # Alts
+        # c.alts is already sorted in load_concepts_optimized
+        for alt in c.alts:
+            term_to_ids[alt].append(idx)
+
+    uf = UnionFind(n)
+    # The order of iteration here depends on insertion order into term_to_ids
+    # Because we iterated sorted concepts and sorted alts, this is deterministic.
+    for ids in term_to_ids.values():
+        if len(ids) > 1:
+            head = ids[0]
+            for other in ids[1:]:
+                uf.union(head, other)
+
+    # Group by root
+    groups = defaultdict(list)
+    for idx in range(n):
+        root = uf.find(idx)
+        groups[root].append(idx)
+
     group_list = list(groups.values())
+    # This shuffle is now fully deterministic
     random.shuffle(group_list)
-    
-    train_uris = set()
-    test_uris = set()
-    total = len(concepts)
-    target_train = int(total * train_ratio)
-    
-    for group in group_list:
-        if len(train_uris) < target_train:
-            train_uris.update(group)
+
+    train_ids = []
+    test_ids = []
+    target_train = int(n * ratio)
+
+    current_train = 0
+    for grp in group_list:
+        if current_train < target_train:
+            train_ids.extend(grp)
+            current_train += len(grp)
         else:
-            test_uris.update(group)
-    
-    return train_uris, test_uris
+            test_ids.extend(grp)
 
+    return train_ids, test_ids
 
-# ============================================================================
-# PAIR GENERATION
-# ============================================================================
+# =========================
+# CSV WRITER HELPER
+# =========================
 
-def generate_positive_pairs(concept_uris, concepts):
-    """
-    Generate ALL positive pairs for concepts:
-    1. prefLabel ↔ each altLabel (concept paired with its entry terms)
-    2. altLabel ↔ altLabel (entry terms paired with each other)
-    
-    Example: Concept "WORK AT HOME" with altLabels ["OUTWORK", "HOME-BASED WORK"]
-    Generates:
-      - WORK AT HOME ↔ OUTWORK
-      - WORK AT HOME ↔ HOME-BASED WORK
-      - OUTWORK ↔ HOME-BASED WORK
-    """
-    pairs = []
-    
-    for uri in concept_uris:
-        pref_label = concepts[uri]['prefLabel']
-        alt_labels = concepts[uri]['altLabels']
-        
-        # 1. Pair prefLabel with each altLabel
-        for alt in alt_labels:
-            pairs.append({
-                'term1': pref_label,
-                'term2': alt,
-                'concept': pref_label,
-                'concept_uri': uri,
-                'label': 1,
-                'shortest_path': 0  # Same concept
-            })
-        
-        # 2. Pair altLabels with each other
-        for i in range(len(alt_labels)):
-            for j in range(i + 1, len(alt_labels)):
-                pairs.append({
-                    'term1': alt_labels[i],
-                    'term2': alt_labels[j],
-                    'concept': pref_label,
-                    'concept_uri': uri,
-                    'label': 1,
-                    'shortest_path': 0  # Same concept
+class IncrementalCSVWriter:
+    """Handles writing rows to CSV in chunks to avoid OOM with large lists."""
+    def __init__(self, filepath, fieldnames):
+        self.filepath = filepath
+        self.fieldnames = fieldnames
+        self.buffer = []
+        self.total_written = 0
+
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Initialize file and write header
+        with open(self.filepath, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=self.fieldnames)
+            writer.writeheader()
+
+    def add(self, row):
+        self.buffer.append(row)
+        if len(self.buffer) >= WRITE_BATCH_SIZE:
+            self.flush()
+
+    def add_batch(self, rows):
+        self.buffer.extend(rows)
+        if len(self.buffer) >= WRITE_BATCH_SIZE:
+            self.flush()
+
+    def flush(self):
+        if not self.buffer:
+            return
+        with open(self.filepath, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=self.fieldnames)
+            writer.writerows(self.buffer)
+        self.total_written += len(self.buffer)
+        self.buffer = []
+
+    def close(self):
+        self.flush()
+        print(f"  -> Saved {self.total_written} rows to {self.filepath}")
+
+# =========================
+# PAIR GENERATION (The Engine)
+# =========================
+
+def generate_positive_pairs_to_csv(
+    concept_ids: List[int],
+    concepts: List[ConceptData],
+    output_path: str
+):
+    writer = IncrementalCSVWriter(output_path, ["term1", "term2", "concept_uri", "label", "shortest_path"])
+
+    for cid in tqdm(concept_ids, desc="  Positive Pairs", unit="concept"):
+        c = concepts[cid]
+        terms = [c.pref] + c.alts
+        # clique
+        for i in range(len(terms)):
+            for j in range(i + 1, len(terms)):
+                writer.add({
+                    "term1": terms[i],
+                    "term2": terms[j],
+                    "concept_uri": c.uri,
+                    "label": 1,
+                    "shortest_path": 0
                 })
-    
-    return pairs
+    writer.close()
 
-
-def generate_negative_pairs(concept_uris, concepts, exclusion_sets):
+def generate_negative_pairs_to_csv(
+    concept_ids: List[int],
+    concepts: List[ConceptData],
+    exclusion_sets: List[Set[int]],
+    adj: Dict[int, Set[int]],
+    seed: int,
+    output_path: str
+):
     """
-    Generate all valid negative pairs between concepts.
-    Rules:
-    - No self-pairing
-    - No parent/ancestor relationships
+    Optimized Negative Generation using Single-Source Shortest Path (SSSP).
+    Instead of running BFS for every pair (N^2 BFS), we run BFS once per concept (N BFS).
     """
-    pairs = []
-    uri_list = sorted(concept_uris)  # Sort for reproducibility
-    
-    for i in range(len(uri_list)):
-        uri1 = uri_list[i]
-        excluded = exclusion_sets[uri1]
-        label1 = concepts[uri1]['prefLabel']
-        
-        for j in range(i + 1, len(uri_list)):
-            uri2 = uri_list[j]
-            
-            # Skip if hierarchically related
-            if uri2 in excluded:
-                continue
-            
-            label2 = concepts[uri2]['prefLabel']
-            
-            # Calculate shortest path between the two concepts
-            path_length = find_shortest_path(uri1, uri2, concepts)
-            
-            pairs.append({
-                'term1': label1,
-                'term2': label2,
-                'concept1_uri': uri1,
-                'concept2_uri': uri2,
-                'label': 0,
-                'shortest_path': path_length
-            })
-    
-    return pairs
+    writer = IncrementalCSVWriter(output_path, ["term1", "term2", "concept1_uri", "concept2_uri", "label", "shortest_path"])
 
+    sorted_ids = sorted(concept_ids) # Sort for determinism
+    n = len(sorted_ids)
 
-# ============================================================================
-# OUTPUT FUNCTIONS
-# ============================================================================
+    random.seed(seed)
 
-def save_to_csv(pairs, filename):
-    """Save pairs to CSV file."""
-    filepath = os.path.join(OUTPUT_DIR, filename)
-    
-    if not pairs:
-        print(f"  No pairs to save for {filename}")
-        return
-    
-    fieldnames = list(pairs[0].keys())
-    
-    with open(filepath, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(pairs)
-    
-    print(f"  Saved: {filepath} ({len(pairs)} rows)")
+    # Progress bar setup
+    mode_str = 'ALL' if GENERATE_ALL_NEGATIVES else 'SAMPLED'
+    pbar = tqdm(total=n, desc=f"  Negative Pairs ({mode_str})", unit="concept")
 
+    for i in range(n):
+        u1_id = sorted_ids[i]
+        c1 = concepts[u1_id]
+        excl = exclusion_sets[u1_id]
 
-# ============================================================================
+        # 1. Run ONE BFS from u1 to find distances to ALL connected nodes
+        dists = {}
+        if u1_id in adj:
+            q = deque([(u1_id, 0)])
+            visited = {u1_id}
+            dists[u1_id] = 0
+
+            while q:
+                curr, d = q.popleft()
+                for nb in adj[curr]:
+                    if nb not in visited:
+                        visited.add(nb)
+                        dists[nb] = d + 1
+                        q.append((nb, d + 1))
+
+        # 2. Iterate potential partners
+        if GENERATE_ALL_NEGATIVES:
+            # Check all subsequent concepts
+            for j in range(i + 1, n):
+                u2_id = sorted_ids[j]
+
+                # Exclusion Check
+                if u2_id in excl:
+                    continue
+                if u1_id in exclusion_sets[u2_id]:
+                    continue
+
+                d = dists.get(u2_id, -1)
+
+                c2 = concepts[u2_id]
+                writer.add({
+                    "term1": c1.pref,
+                    "term2": c2.pref,
+                    "concept1_uri": c1.uri,
+                    "concept2_uri": c2.uri,
+                    "label": 0,
+                    "shortest_path": d
+                })
+        else:
+            # Sampled approach
+            valid_samples = []
+            attempts = 0
+            max_attempts = NEGATIVE_SAMPLES_PER_CONCEPT * 3
+
+            while len(valid_samples) < NEGATIVE_SAMPLES_PER_CONCEPT and attempts < max_attempts:
+                attempts += 1
+                u2_id = random.choice(sorted_ids)
+
+                if u2_id == u1_id: continue
+                if u1_id >= u2_id: continue
+
+                if u2_id in excl: continue
+                if u1_id in exclusion_sets[u2_id]: continue
+
+                if u2_id not in valid_samples:
+                    valid_samples.append(u2_id)
+
+            for u2_id in valid_samples:
+                c2 = concepts[u2_id]
+                d = dists.get(u2_id, -1)
+                writer.add({
+                    "term1": c1.pref,
+                    "term2": c2.pref,
+                    "concept1_uri": c1.uri,
+                    "concept2_uri": c2.uri,
+                    "label": 0,
+                    "shortest_path": d
+                })
+
+        pbar.update(1)
+
+    pbar.close()
+    writer.close()
+
+# =========================
 # MAIN
-# ============================================================================
+# =========================
 
 def main():
     print("=" * 70)
-    print("ELSST TRAIN/TEST DATASET GENERATION")
-    print(f"Random Seed: {RANDOM_SEED}")
-    print(f"Train Ratio: {TRAIN_RATIO}")
-    print("=" * 70)
-    
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
-    # Step 1: Parse and extract
-    root = parse_rdf_file(RDF_FILE_PATH)
-    concepts = extract_concepts(root)
-    print(f"Extracted {len(concepts)} concepts")
-    
-    # Step 2: Build exclusion sets
-    print("Building hierarchy exclusion sets...")
-    exclusion_sets = build_exclusion_sets(concepts)
-    
-    # Step 3: Split concepts (ensuring NO term overlap)
-    print("Splitting concepts into train/test (no term overlap)...")
-    train_uris, test_uris = split_concepts_no_term_overlap(concepts, TRAIN_RATIO, RANDOM_SEED)
-    print(f"  Train concepts: {len(train_uris)}")
-    print(f"  Test concepts:  {len(test_uris)}")
-    
-    # Verify no concept overlap
-    concept_overlap = train_uris & test_uris
-    print(f"  Concept overlap: {len(concept_overlap)} (should be 0)")
-    
-    # Verify no term overlap
-    train_terms = set()
-    for uri in train_uris:
-        train_terms.update(get_all_terms(uri, concepts))
-    
-    test_terms = set()
-    for uri in test_uris:
-        test_terms.update(get_all_terms(uri, concepts))
-    
-    term_overlap = train_terms & test_terms
-    print(f"  Term overlap:    {len(term_overlap)} (should be 0)")
-    
-    if term_overlap:
-        print(f"  WARNING: Overlapping terms: {list(term_overlap)[:5]}")
-    
-    # Step 4: Generate pairs for TRAIN
-    print("\nGenerating TRAIN pairs...")
-    train_positive = generate_positive_pairs(train_uris, concepts)
-    train_negative = generate_negative_pairs(train_uris, concepts, exclusion_sets)
-    
-    # Step 5: Generate pairs for TEST
-    print("Generating TEST pairs...")
-    test_positive = generate_positive_pairs(test_uris, concepts)
-    test_negative = generate_negative_pairs(test_uris, concepts, exclusion_sets)
-    
-    # Step 6: Save datasets
-    print("\nSaving datasets...")
-    save_to_csv(train_positive, "train_positive_pairs.csv")
-    save_to_csv(train_negative, "train_negative_pairs.csv")
-    save_to_csv(test_positive, "test_positive_pairs.csv")
-    save_to_csv(test_negative, "test_negative_pairs.csv")
-    
-    # Step 7: Print summary
-    print("\n" + "=" * 70)
-    print("SUMMARY REPORT")
-    print("=" * 70)
-    
-    print(f"\n--- CONFIGURATION ---")
-    print(f"Random Seed:           {RANDOM_SEED}")
-    print(f"Train/Test Ratio:      {TRAIN_RATIO:.0%} / {1-TRAIN_RATIO:.0%}")
-    
-    print(f"\n--- CONCEPT & TERM SPLIT ---")
-    print(f"Total concepts:        {len(concepts)}")
-    print(f"Train concepts:        {len(train_uris)}")
-    print(f"Test concepts:         {len(test_uris)}")
-    print(f"Concept overlap:       {len(concept_overlap)} (verified: 0)")
-    print(f"Train terms:           {len(train_terms)}")
-    print(f"Test terms:            {len(test_terms)}")
-    print(f"Term overlap:          {len(term_overlap)} (verified: 0)")
-    
-    # Count concepts with altLabels
-    train_with_alts = sum(1 for u in train_uris if concepts[u]['altLabels'])
-    test_with_alts = sum(1 for u in test_uris if concepts[u]['altLabels'])
-    train_with_2plus = sum(1 for u in train_uris if len(concepts[u]['altLabels']) >= 2)
-    test_with_2plus = sum(1 for u in test_uris if len(concepts[u]['altLabels']) >= 2)
-    
-    print(f"\n--- POSITIVE PAIRS ---")
-    print(f"Train positive pairs:  {len(train_positive)}")
-    print(f"  - prefLabel ↔ altLabel: from {train_with_alts} concepts with altLabels")
-    print(f"  - altLabel ↔ altLabel:  from {train_with_2plus} concepts with 2+ altLabels")
-    print(f"Test positive pairs:   {len(test_positive)}")
-    print(f"  - prefLabel ↔ altLabel: from {test_with_alts} concepts with altLabels")
-    print(f"  - altLabel ↔ altLabel:  from {test_with_2plus} concepts with 2+ altLabels")
-    
-    # Calculate excluded hierarchical pairs
-    max_train = len(train_uris) * (len(train_uris) - 1) // 2
-    max_test = len(test_uris) * (len(test_uris) - 1) // 2
-    
-    print(f"\n--- NEGATIVE PAIRS (unrelated concepts) ---")
-    print(f"Train negative pairs:  {len(train_negative)}")
-    print(f"  Max possible:        {max_train}")
-    print(f"  Excluded (hierarchy): {max_train - len(train_negative)}")
-    print(f"Test negative pairs:   {len(test_negative)}")
-    print(f"  Max possible:        {max_test}")
-    print(f"  Excluded (hierarchy): {max_test - len(test_negative)}")
-    
-    print(f"\n--- TOTAL ---")
-    print(f"Train total pairs:     {len(train_positive) + len(train_negative)}")
-    print(f"Test total pairs:      {len(test_positive) + len(test_negative)}")
-    print(f"Grand total:           {len(train_positive) + len(train_negative) + len(test_positive) + len(test_negative)}")
-    
-    print("\n" + "=" * 70)
-    print("OUTPUT FILES:")
-    print("=" * 70)
-    print(f"  - train_positive_pairs.csv  ({len(train_positive)} pairs)")
-    print(f"  - train_negative_pairs.csv  ({len(train_negative)} pairs)")
-    print(f"  - test_positive_pairs.csv   ({len(test_positive)} pairs)")
-    print(f"  - test_negative_pairs.csv   ({len(test_negative)} pairs)")
+    print("ELSST PAIR GENERATION (OPTIMIZED & DETERMINISTIC)")
+    print(f"RDF: {RDF_FILE_PATH}")
+    print(f"Mode: {'ALL NEGATIVES' if GENERATE_ALL_NEGATIVES else 'SAMPLED'}")
     print("=" * 70)
 
+    # 1. Load
+    concepts, adj = load_concepts_optimized(RDF_FILE_PATH, LANGUAGE)
+    print(f"Loaded {len(concepts)} concepts.")
+
+    # 2. Hierarchy
+    print("[2-4/8] Computing hierarchy (Ancestors/Descendants/Exclusions)...")
+    ancestors, descendants = compute_transitive_closures(concepts)
+    exclusion_sets = build_exclusion_sets(concepts, ancestors, descendants, EXCLUDE_SKOS_RELATED_FROM_NEGATIVES)
+
+    # 3. Split
+    print("[6/8] Splitting Train/Test (No term overlap)...")
+    # We pass the list of all indices [0..N-1] implicitly via the function
+    train_ids, test_ids = split_concepts_no_overlap(concepts, TRAIN_RATIO, RANDOM_SEED)
+    print(f"Train: {len(train_ids)} | Test: {len(test_ids)}")
+
+    # 4. Generate
+    print("[8/8] Generating Pairs (Direct to CSV)...")
+
+    # Train
+    generate_positive_pairs_to_csv(train_ids, concepts, os.path.join(OUTPUT_DIR, "train_positive_pairs.csv"))
+    generate_negative_pairs_to_csv(train_ids, concepts, exclusion_sets, adj, RANDOM_SEED, os.path.join(OUTPUT_DIR, "train_negative_pairs.csv"))
+
+    # Test
+    generate_positive_pairs_to_csv(test_ids, concepts, os.path.join(OUTPUT_DIR, "test_positive_pairs.csv"))
+    generate_negative_pairs_to_csv(test_ids, concepts, exclusion_sets, adj, RANDOM_SEED + 1, os.path.join(OUTPUT_DIR, "test_negative_pairs.csv"))
+
+    print("\nDone.")
 
 if __name__ == "__main__":
     main()

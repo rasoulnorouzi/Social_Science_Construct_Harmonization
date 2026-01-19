@@ -21,3 +21,15 @@ with torch.no_grad():
 last_hidden_states = outputs.last_hidden_state
 print(last_hidden_states)
 # %%
+import pandas as pd
+# %%
+df_n = pd.read_csv("datasets/processed_datasets/train_negative_pairs.csv")
+# %%
+print(df_n.shape)
+# %%
+df_p = pd.read_csv("datasets/processed_datasets/train_positive_pairs.csv")
+print(df_p.shape)
+# %%
+df_p_test = pd.read_csv("datasets/processed_datasets/test_positive_pairs.csv")
+print(df_p_test.shape)
+# %%
