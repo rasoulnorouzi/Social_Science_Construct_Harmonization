@@ -8,7 +8,7 @@ def setup_reproducibility(seed=42):
     torch.manual_seed(seed)
     return seed
 
-def load_and_prepare_data(pos_path, neg_path, seed=42):
+def load_and_prepare_data(pos_path, neg_path, seed=42, balance=False):
     print("Loading datasets...")
     try:
         pos_df = pd.read_csv(pos_path, on_bad_lines='skip')
@@ -20,12 +20,16 @@ def load_and_prepare_data(pos_path, neg_path, seed=42):
     print(f"Positive samples: {len(pos_df)}")
     print(f"Negative samples (total): {len(neg_df)}")
 
-    n_pos = len(pos_df)
-    if len(neg_df) > n_pos:
-        neg_df_sampled = neg_df.sample(n=n_pos, random_state=seed)
+    if balance:
+        n_pos = len(pos_df)
+        if len(neg_df) > n_pos:
+            neg_df_sampled = neg_df.sample(n=n_pos, random_state=seed)
+        else:
+            neg_df_sampled = neg_df
+        print(f"Negative samples (sampled): {len(neg_df_sampled)}")
     else:
         neg_df_sampled = neg_df
-    print(f"Negative samples (sampled): {len(neg_df_sampled)}")
+        print(f"Negative samples (used as is): {len(neg_df_sampled)}")
 
     df = pd.concat([pos_df, neg_df_sampled])
     df = df.sample(frac=1, random_state=seed).reset_index(drop=True)

@@ -7,13 +7,25 @@ import torch
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 def compute_embeddings_and_similarity(model, df, batch_size=16):
-    print("Encoding sentences...")
-    embeddings1 = model.encode(df['term1'].tolist(), convert_to_tensor=True, show_progress_bar=False, batch_size=batch_size)
-    embeddings2 = model.encode(df['term2'].tolist(), convert_to_tensor=True, show_progress_bar=False, batch_size=batch_size)
+    print("Building unique concept set...")
+    terms1 = df['term1'].tolist()
+    terms2 = df['term2'].tolist()
+    unique_terms = list(set(terms1) | set(terms2))
 
-    print("Computing Cosine Similarities...")
-    similarities = torch.nn.functional.cosine_similarity(embeddings1, embeddings2).cpu().numpy()
-    return similarities
+    print(f"Encoding {len(unique_terms)} unique concepts...")
+    term_to_embedding = {}
+    embeddings = model.encode(unique_terms, convert_to_tensor=True, show_progress_bar=True, batch_size=batch_size)
+    for term, emb in zip(unique_terms, embeddings):
+        term_to_embedding[term] = emb
+
+    print("Computing Cosine Similarities for pairs...")
+    similarities = []
+    for t1, t2 in zip(terms1, terms2):
+        emb1 = term_to_embedding[t1]
+        emb2 = term_to_embedding[t2]
+        sim = torch.nn.functional.cosine_similarity(emb1.unsqueeze(0), emb2.unsqueeze(0)).item()
+        similarities.append(sim)
+    return np.array(similarities)
 
 def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 1.00, 0.01)):
     print(f"\n--- Results per Threshold ({model_name}) ---")
