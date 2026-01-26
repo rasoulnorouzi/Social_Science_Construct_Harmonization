@@ -22,7 +22,7 @@ def get_unique_terms_embeddings(model, df):
     embeddings = np.ascontiguousarray(embeddings, dtype=np.float64)
     return unique_terms, embeddings
 
-def run_clustering_optimization(model_name, model_display_name, unique_terms, embeddings, df_pairs, min_cluster_sizes, min_samples, umap_n_components):
+def run_clustering_optimization(model_display_name, unique_terms, embeddings, df_pairs, min_cluster_sizes, min_samples, umap_n_components):
     """
     Sweeps UMAP components and HDBSCAN min_cluster_size to maximize F1.
     """
@@ -84,12 +84,12 @@ def run_clustering_optimization(model_name, model_display_name, unique_terms, em
                 for min_samp in min_samples:
                     try:
                         # Run HDBSCAN on reduced data
-                        # metric='euclidean' is standard on UMAP output (spatial density)
+                        # metric='cosine' to match embedding space
                         # cluster_selection_epsilon=0.0 (default)
                         clusterer = HDBSCAN(
                             min_cluster_size=int(min_size), 
                             min_samples=int(min_samp),
-                            metric='euclidean', 
+                            metric='cosine', 
                             copy=True
                         )
                         cluster_labels = clusterer.fit_predict(reduced_embeddings)
