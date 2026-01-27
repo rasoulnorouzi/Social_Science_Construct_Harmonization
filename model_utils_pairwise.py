@@ -14,7 +14,9 @@ def compute_embeddings_and_similarity(model, df, batch_size=16):
 
     print(f"Encoding {len(unique_terms)} unique concepts...")
     term_to_embedding = {}
-    embeddings = model.encode(unique_terms, convert_to_tensor=True, show_progress_bar=True, batch_size=batch_size)
+    embeddings_non_normal = model.encode(unique_terms, convert_to_tensor=True, show_progress_bar=True, batch_size=batch_size)
+    embeddings = torch.nn.functional.normalize(embeddings_non_normal, p=2, dim=1)
+    
     for term, emb in zip(unique_terms, embeddings):
         term_to_embedding[term] = emb
 
