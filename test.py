@@ -57,6 +57,7 @@ def sample_unique_terms(n, df):
 initial_seeds = sample_unique_terms(10, df)
 print(f"Initial seeds: {initial_seeds}")
 
+# %%
 
 # Identify remaining terms
 remaining_terms = terms[~np.isin(terms, initial_seeds)]
@@ -108,3 +109,4 @@ for i, term in enumerate(remaining_terms):
         seed_embeddings = torch.cat([seed_embeddings, term_emb.unsqueeze(0)], dim=0)
         
     print(f"Total clusters so far: {len(seeds_cluster)}")
+
