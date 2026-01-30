@@ -170,7 +170,7 @@ def plot_seed_clusters(seeds_cluster, term_to_embedding):
 
 
 # %% Main Execution
-def run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold=0.7, random_state=42, num_random_trials=1):
+def run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold = np.arange(0.1, 0.9, 0.01), random_state=42, num_random_trials=1):
     
     # 3. Prepare Terms and Embeddings
     # Make a unique list of all terms
@@ -183,33 +183,29 @@ def run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_thres
 
     # Create a fast lookup dictionary
     term_to_embedding = {term: embedding for term, embedding in zip(terms, term_embeddings)}
-    
-    all_results = []
-    for trial in range(num_random_trials):
-        print(f"\n--- Trial {trial+1}/{num_random_trials} ---")
-        #  4. Select Initial Seeds
-        initial_seeds, remaining_terms = sample_unique_terms(n_initial_seeds, df, terms, random_state=random_state + trial)
-        print(f"Initial seeds: {initial_seeds}")
 
-        #  5. Seed Clustering
-        seeds_cluster = seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold=similarity_threshold)
-        print(f"Number of clusters formed: {len(seeds_cluster)}")
+    # 4. Select Initial Seeds
+    initial_seeds, remaining_terms = sample_unique_terms(n_initial_seeds, df, terms, random_state=random_state)
+    print(f"Initial seeds: {initial_seeds}")    
+    results = []
+    for threshold in similarity_threshold:
+        for trial in range(num_random_trials):
+            print(f"Running seed clustering with threshold {threshold}, trial {trial+1}/{num_random_trials}")
+            seeds_cluster = seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold=threshold)
+            precision, recall, f1, pos_acc, neg_acc = evaluate_seed_clustering(seeds_cluster, df, terms)
+            print(f"Threshold: {threshold}, Trial: {trial+1}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, Pos Acc: {pos_acc:.4f}, Neg Acc: {neg_acc:.4f}")
+            results.append({
+                'threshold': threshold,
+                'trial': trial + 1,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'pos_acc': pos_acc,
+                'neg_acc': neg_acc,
+                'num_clusters': len(seeds_cluster)
+            })
+    return results
 
-        #  6. Evaluation
-        precision, recall, f1, pos_acc, neg_acc = evaluate_seed_clustering(seeds_cluster, df, terms)
-        print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, PosAcc: {pos_acc:.4f}, NegAcc: {neg_acc:.4f}")
-        
-        all_results.append({
-            'trial': trial + 1,
-            'precision': precision,
-            'recall': recall,
-            'f1': f1,
-            'pos_acc': pos_acc,
-            'neg_acc': neg_acc,
-            'num_clusters': len(seeds_cluster)
-        })
-    
-    return all_results
 
 
 
@@ -224,5 +220,14 @@ checkpoint = "sentence-transformers/all-mpnet-base-v2"
 model = model_utils_shared.load_model(model_name=checkpoint, model_type='sentence_transformer')
 # %%
 # Run the full pipeline
-results = run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold=0.67, random_state=42, num_random_trials=5)
+results = run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold=np.arange(0.1, 0.9, 0.3), random_state=42, num_random_trials=5)
+# %%
+results
+# %%
+# Convert results to DataFrame for easier analysis
+results_df = pd.DataFrame(results)
+# Display average metrics per threshold
+
+# %%
+results_df
 # %%
