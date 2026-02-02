@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer, util
 import model_utils_shared  
 import seaborn as sns
@@ -43,6 +44,7 @@ def seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold
     seeds_cluster = {seed: [seed] for seed in current_seeds}
 
     seed_embeddings = torch.stack([term_to_embedding[seed] for seed in current_seeds])
+    unclustered_count = 0
 
     for i, term in enumerate(remaining_terms):
         term_emb = term_to_embedding[term]
@@ -57,7 +59,7 @@ def seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold
         max_score, max_idx = torch.max(scores, dim=0)
         # print(f"Max score: {max_score}, Max idx: {max_idx}")
         
-        if max_score > threshold:
+        if max_score.item() > threshold:
             # Case A: Found a matching cluster
             best_seed_name = current_seeds[max_idx.item()]
             # print(f"Best seed name: {best_seed_name}")
@@ -81,12 +83,13 @@ def seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold
             # Case B: No match found, create NEW cluster
             current_seeds.append(term)
             seeds_cluster[term] = [term]
+            unclustered_count += 1
             # print(f"seeds_cluster after adding new seed: {seeds_cluster}")
             
             # Append the new seed embedding to our comparison tensor
             seed_embeddings = torch.cat([seed_embeddings, term_emb.unsqueeze(0)], dim=0)
     
-
+    print(f"  Unclustered (new seeds created): {unclustered_count}")
     return seeds_cluster
 
 
@@ -124,7 +127,7 @@ def evaluate_seed_clustering(seeds_cluster, df_pairs, unique_terms):
     pos_mask = labels_true == 1
     neg_mask = labels_true == 0
     pos_acc = np.sum(labels_pred[pos_mask]) / np.sum(pos_mask) if np.sum(pos_mask) > 0 else 0.0
-    neg_acc = np.sum(~labels_pred[neg_mask]) / np.sum(neg_mask) if np.sum(neg_mask) > 0 else 0.0
+    neg_acc = np.sum(labels_pred[neg_mask] == 0) / np.sum(neg_mask) if np.sum(neg_mask) > 0 else 0.0
 
     
     return precision, recall, f1, pos_acc, neg_acc
@@ -170,7 +173,7 @@ def plot_seed_clusters(seeds_cluster, term_to_embedding):
 
 
 # %% Main Execution
-def run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold = np.arange(0.1, 0.9, 0.01), random_state=42, num_random_trials=1):
+def run_seed_clustering_pipeline(df, model, n_initial_seeds= [10, 25, 50, 100, 200, 500], similarity_threshold = np.arange(0.1, 0.9, 0.01), random_state=42, num_random_trials=1):
     
     # 3. Prepare Terms and Embeddings
     # Make a unique list of all terms
@@ -180,54 +183,87 @@ def run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_thres
 
     # Encode all terms at once (Move to GPU if available automatically)
     term_embeddings = model.encode(terms, convert_to_tensor=True, show_progress_bar=True)
+    
+    # L2 normalize embeddings (required for proper cosine similarity)
+    term_embeddings = F.normalize(term_embeddings, p=2, dim=1)
 
     # Create a fast lookup dictionary
     term_to_embedding = {term: embedding for term, embedding in zip(terms, term_embeddings)}
 
     # 4. Select Initial Seeds
-    initial_seeds, remaining_terms = sample_unique_terms(n_initial_seeds, df, terms, random_state=random_state)
-    print(f"Initial seeds: {initial_seeds}")    
     results = []
-    for threshold in similarity_threshold:
-        for trial in range(num_random_trials):
-            print(f"Running seed clustering with threshold {threshold}, trial {trial+1}/{num_random_trials}")
-            seeds_cluster = seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold=threshold)
-            precision, recall, f1, pos_acc, neg_acc = evaluate_seed_clustering(seeds_cluster, df, terms)
-            print(f"Threshold: {threshold}, Trial: {trial+1}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, Pos Acc: {pos_acc:.4f}, Neg Acc: {neg_acc:.4f}")
-            results.append({
-                'threshold': threshold,
-                'trial': trial + 1,
-                'precision': precision,
-                'recall': recall,
-                'f1': f1,
-                'pos_acc': pos_acc,
-                'neg_acc': neg_acc,
-                'num_clusters': len(seeds_cluster)
-            })
-    return results
+    best_f1_mean = 0.0
+    best_n_initial = None
+    best_threshold = None
+
+    for n_initial in n_initial_seeds:
+        for threshold in similarity_threshold:
+            # Round threshold to avoid floating point precision artifacts
+            threshold_rounded = round(threshold, 2)
+            for trial in range(num_random_trials):
+                # Vary random state for each trial to get different seed samples
+                trial_random_state = random_state + trial if random_state is not None else None
+                initial_seeds, remaining_terms = sample_unique_terms(n_initial, df, terms, random_state=trial_random_state)
+                
+                seeds_cluster = seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold=threshold)
+                precision, recall, f1, pos_acc, neg_acc = evaluate_seed_clustering(seeds_cluster, df, terms)
+                results.append({
+                    'model': model.__class__.__name__,
+                    'threshold': threshold_rounded,
+                    'trial': trial + 1,
+                    'precision': precision,
+                    'recall': recall,
+                    'f1': f1,
+                    'pos_acc': pos_acc,
+                    'neg_acc': neg_acc,
+                    'num_initial_seeds': n_initial
+                })
+                print("--------------------------------------------------")
+                print(f"Seeds: {n_initial:>4}|Threshold: {threshold_rounded:>6.2f}|Trial: {trial+1:>2}|F1: {f1:>7.4f}|Precision: {precision:>7.4f}|Recall: {recall:>7.4f}|Pos Acc: {pos_acc:>7.4f}|Neg Acc: {neg_acc:>7.4f}|Clusters:{len(seeds_cluster):>5}")
+
+    # Convert results to DataFrame and calculate means
+    df_results = pd.DataFrame(results)
+    
+    # Group by n_initial_seeds and threshold, then calculate means
+    grouped = df_results.groupby(['num_initial_seeds', 'threshold'])[['precision', 'recall', 'f1', 'pos_acc', 'neg_acc']].mean()
+    grouped = grouped.reset_index()
+    grouped.columns = ['num_initial_seeds', 'threshold', 'precision_mean', 'recall_mean', 'f1_mean', 'pos_acc_mean', 'neg_acc_mean']
+    
+    # Find best configuration based on mean F1
+    best_idx = grouped['f1_mean'].idxmax()
+    best_row = grouped.iloc[best_idx]
+    best_f1_mean = best_row['f1_mean']
+    best_n_initial = best_row['num_initial_seeds']
+    best_threshold = best_row['threshold']
+
+    return df_results, grouped, best_n_initial, best_threshold, best_f1_mean 
 
 
 
 
-# %% 1. Load Data
-neg_path = "datasets/processed_datasets/train_negative_pairs.csv"
-pos_path = "datasets/processed_datasets/train_positive_pairs.csv"
+# # %% 1. Load Data
+# neg_path = "datasets/processed_datasets/train_negative_pairs.csv"
+# pos_path = "datasets/processed_datasets/train_positive_pairs.csv"
 
-# Load dataframe
-df = model_utils_shared.load_and_prepare_data(pos_path, neg_path, balance=False)
+# # Load dataframe
+# df = model_utils_shared.load_and_prepare_data(pos_path, neg_path, balance=False)
 
-checkpoint = "sentence-transformers/all-mpnet-base-v2"
-model = model_utils_shared.load_model(model_name=checkpoint, model_type='sentence_transformer')
-# %%
-# Run the full pipeline
-results = run_seed_clustering_pipeline(df, model, n_initial_seeds=10, similarity_threshold=np.arange(0.1, 0.9, 0.3), random_state=42, num_random_trials=5)
-# %%
-results
-# %%
-# Convert results to DataFrame for easier analysis
-results_df = pd.DataFrame(results)
-# Display average metrics per threshold
-
-# %%
-results_df
-# %%
+# checkpoint = "all-mpnet-base-v2"
+# model = model_utils_shared.load_model(model_name=checkpoint, model_type='sentence_transformer')
+# # %%
+# # Run the full pipeline
+# df_results, grouped, best_n_initial, best_threshold, best_f1_mean = run_seed_clustering_pipeline(df, model, n_initial_seeds=np.array([10, 25]), similarity_threshold=np.arange(0.1, 0.9, 0.1), random_state=42, num_random_trials=2)
+# # %%
+# print("\n" + "="*80)
+# print("INDIVIDUAL TRIAL RESULTS (with means):")
+# print("="*80)
+# print(df_results.head(10))
+# print("\n" + "="*80)
+# print("MEAN RESULTS SUMMARY (aggregated by seeds and threshold):")
+# print("="*80)
+# print(grouped)
+# print("\n" + "="*80)
+# print(f"BEST CONFIGURATION:")
+# print(f"  Seeds: {int(best_n_initial)} | Threshold: {best_threshold:.2f} | Mean F1: {best_f1_mean:.4f}")
+# print("="*80)
+# # # %%
