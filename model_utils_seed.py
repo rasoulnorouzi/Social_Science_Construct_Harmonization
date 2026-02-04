@@ -73,6 +73,8 @@ def seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold
             cluster_embs = torch.stack([term_to_embedding[t] for t in cluster_terms])
             # print(f"cluster_embs.shape: {cluster_embs.shape}")
             new_mean_emb = torch.mean(cluster_embs, dim=0)
+
+            # new_mean_emb = F.normalize(new_mean_emb, p=2, dim=0)
             # print(f"new_mean_emb.shape: {new_mean_emb.shape}")
             
             # Update the seed_embeddings tensor row
