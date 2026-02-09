@@ -6,57 +6,110 @@ import matplotlib.pyplot as plt
 import torch
 from sklearn.metrics import precision_score, recall_score, f1_score, matthews_corrcoef
 
-def compute_embeddings_and_similarity(model, df, batch_size=16):
+
+# ---------------------------------------------------------------------------
+# 1. Embedding Preparation
+# ---------------------------------------------------------------------------
+
+def compute_pairwise_similarities(model, df, batch_size=16):
+    """
+    Encode all unique terms and compute cosine similarities for every pair
+    in *df*.  Returns the similarity array (one value per row of *df*).
+    """
     print("Building unique concept set...")
     terms1 = df['term1'].tolist()
     terms2 = df['term2'].tolist()
     unique_terms = list(set(terms1) | set(terms2))
 
     print(f"Encoding {len(unique_terms)} unique concepts...")
-    term_to_embedding = {}
-    embeddings_non_normal = model.encode(unique_terms, convert_to_tensor=True, show_progress_bar=True, batch_size=batch_size)
-    embeddings = torch.nn.functional.normalize(embeddings_non_normal, p=2, dim=1)
-    
-    for term, emb in zip(unique_terms, embeddings):
-        term_to_embedding[term] = emb
+    embeddings_raw = model.encode(
+        unique_terms, convert_to_tensor=True,
+        show_progress_bar=True, batch_size=batch_size
+    )
+    embeddings = torch.nn.functional.normalize(embeddings_raw, p=2, dim=1)
 
-    print("Computing Cosine Similarities for pairs...")
+    term_to_embedding = {term: emb for term, emb in zip(unique_terms, embeddings)}
+
+    print("Computing Cosine Similarities for pairs... it takes a few minutes...")
+   
     similarities = []
     for t1, t2 in zip(terms1, terms2):
-        emb1 = term_to_embedding[t1]
-        emb2 = term_to_embedding[t2]
-        sim = torch.nn.functional.cosine_similarity(emb1.unsqueeze(0), emb2.unsqueeze(0)).item()
+        sim = torch.nn.functional.cosine_similarity(
+            term_to_embedding[t1].unsqueeze(0),
+            term_to_embedding[t2].unsqueeze(0)
+        ).item()
         similarities.append(sim)
+
     return np.array(similarities)
 
-def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 1.00, 0.01)):
+
+# ---------------------------------------------------------------------------
+# 2. Single-Run Evaluation (mirror model_utils_seed.py style)
+# ---------------------------------------------------------------------------
+
+def evaluate_pairwise(similarities, labels, threshold):
+    """
+    Evaluate pairwise predictions at a **single** cosine-similarity threshold.
+
+    Args:
+        similarities: np.ndarray of cosine similarities (one per pair).
+        labels:       np.ndarray of ground-truth labels (1 / 0).
+        threshold:    float, cosine similarity cut-off.
+
+    Returns:
+        precision, recall, f1, pos_acc, neg_acc, mcc
+    """
+    preds = (similarities > threshold).astype(int)
+
+    p = precision_score(labels, preds, zero_division=0)
+    r = recall_score(labels, preds, zero_division=0)
+    f1 = f1_score(labels, preds, zero_division=0)
+    mcc = matthews_corrcoef(labels, preds) if len(set(preds)) > 1 else 0.0
+
+    pos_mask = labels == 1
+    neg_mask = labels == 0
+    pos_acc = np.mean(preds[pos_mask] == 1) if np.any(pos_mask) else 0.0
+    neg_acc = np.mean(preds[neg_mask] == 0) if np.any(neg_mask) else 0.0
+
+    return p, r, f1, pos_acc, neg_acc, mcc
+
+
+# ---------------------------------------------------------------------------
+# 3. Optimisation Pipeline (sweep thresholds)
+# ---------------------------------------------------------------------------
+
+def run_pairwise_optimization(model_name, model, df, batch_size=16,
+                              thresholds=np.arange(0.10, 1.00, 0.01)):
+    """
+    Sweep cosine-similarity thresholds and collect metrics for each.
+    Internally calls :func:`evaluate_pairwise` per threshold.
+
+    Returns:
+        results:             list[dict] – one entry per threshold.
+        best_threshold:      float – threshold that maximised F1.
+    """
+    similarities = compute_pairwise_similarities(model, df, batch_size)
+    labels = df['label'].values
+
     print(f"\n--- Results per Threshold ({model_name}) ---")
-    print(f"{'Threshold':<10} | {'F1':<10} | {'Precision':<10} | {'Recall':<10} | {'PosAcc':<10} | {'NegAcc':<10} | {'MCC':<10}")
+    print(f"{'Threshold':<10} | {'F1':<10} | {'Precision':<10} | "
+          f"{'Recall':<10} | {'PosAcc':<10} | {'NegAcc':<10} | {'MCC':<10}")
     print("-" * 95)
 
-    current_model_results = []
-    best_f1_model = -1
-    best_threshold_model = -1
-    
-    for t in thresholds:
-        preds = (similarities > t).astype(int)
-        
-        p = precision_score(labels, preds, zero_division=0)
-        r = recall_score(labels, preds, zero_division=0)
-        f1 = f1_score(labels, preds, zero_division=0)
-        mcc = matthews_corrcoef(labels, preds) if len(set(preds)) > 1 else 0.0
-        
-        pos_mask = (labels == 1)
-        neg_mask = (labels == 0)
-        
-        pos_acc = np.mean(preds[pos_mask] == 1) if np.any(pos_mask) else 0.0
-        neg_acc = np.mean(preds[neg_mask] == 0) if np.any(neg_mask) else 0.0
+    results = []
+    best_f1 = -1
+    best_threshold = -1
 
-        if f1 > best_f1_model:
-            best_f1_model = f1
-            best_threshold_model = t
-        
-        result_entry = {
+    for t in thresholds:
+        p, r, f1, pos_acc, neg_acc, mcc = evaluate_pairwise(
+            similarities, labels, t
+        )
+
+        if f1 > best_f1:
+            best_f1 = f1
+            best_threshold = t
+
+        results.append({
             'model': model_name,
             'threshold': t,
             'precision_mean': p, 'precision_var': 0.0,
@@ -65,12 +118,12 @@ def evaluate_model(model_name, similarities, labels, thresholds=np.arange(0.10, 
             'pos_acc_mean': pos_acc,
             'neg_acc_mean': neg_acc,
             'mcc': mcc
-        }
-        current_model_results.append(result_entry)
-        
-        print(f"{t:.2f}       | {f1:.4f}     | {p:.4f}     | {r:.4f}     | {pos_acc:.4f}     | {neg_acc:.4f}     | {mcc:.4f}")
-        
-    return current_model_results, best_threshold_model
+        })
+
+        print(f"{t:.2f}       | {f1:.4f}     | {p:.4f}     | "
+              f"{r:.4f}     | {pos_acc:.4f}     | {neg_acc:.4f}     | {mcc:.4f}")
+
+    return results, best_threshold
 
 def plot_individual_performance(model_results, model_name, best_threshold_model, display_name=None):
     if display_name is None:
