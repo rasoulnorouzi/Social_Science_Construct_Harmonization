@@ -175,7 +175,7 @@ def plot_seed_clusters(seeds_cluster, term_to_embedding):
 
 
 # %% Main Execution
-def run_seed_clustering_pipeline(df, model, n_initial_seeds= [10, 25, 50, 100, 200, 500], similarity_threshold = np.arange(0.1, 0.9, 0.01), random_state=42, num_random_trials=1):
+def run_seed_clustering_optimization(df, model, n_initial_seeds= [10, 25, 50, 100, 200, 500], similarity_threshold = np.arange(0.1, 0.9, 0.01), random_state=42, num_random_trials=1):
     
     # 3. Prepare Terms and Embeddings
     # Make a unique list of all terms
@@ -254,7 +254,7 @@ def run_seed_clustering_pipeline(df, model, n_initial_seeds= [10, 25, 50, 100, 2
 # model = model_utils_shared.load_model(model_name=checkpoint, model_type='sentence_transformer')
 # # %%
 # # Run the full pipeline
-# df_results, grouped, best_n_initial, best_threshold, best_f1_mean = run_seed_clustering_pipeline(df, model, n_initial_seeds=np.array([10, 25]), similarity_threshold=np.arange(0.1, 0.9, 0.1), random_state=42, num_random_trials=2)
+# df_results, grouped, best_n_initial, best_threshold, best_f1_mean = run_seed_clustering_optimization(df, model, n_initial_seeds=np.array([10, 25]), similarity_threshold=np.arange(0.1, 0.9, 0.1), random_state=42, num_random_trials=2)
 # # %%
 # print("\n" + "="*80)
 # print("INDIVIDUAL TRIAL RESULTS (with means):")
