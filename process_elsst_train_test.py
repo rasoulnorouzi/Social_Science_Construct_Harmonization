@@ -27,7 +27,7 @@ from tqdm import tqdm
 # =========================
 
 RDF_FILE_PATH = "datasets/raw_datasets/ELSST_R5.rdf"
-OUTPUT_DIR = "datasets/processed_datasets"
+OUTPUT_DIR = "datasets/processed_datasets/elsst"
 
 LANGUAGE = "en"
 RANDOM_SEED = 42
