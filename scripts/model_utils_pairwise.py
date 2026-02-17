@@ -125,7 +125,7 @@ def run_pairwise_optimization(model_name, model, df, batch_size=16,
 
     return results, best_threshold
 
-def plot_individual_performance(model_results, model_name, best_threshold_model, display_name=None):
+def plot_individual_performance(model_results, model_name, best_threshold_model, plots_dir, display_name=None):
     if display_name is None:
         display_name = model_name
 
@@ -160,7 +160,7 @@ def plot_individual_performance(model_results, model_name, best_threshold_model,
     plt.tight_layout()
     
     # Save results
-    plots_dir = 'results/plots'
+    
     os.makedirs(plots_dir, exist_ok=True)
     
     safe_name = model_name.replace('/', '_').replace('-', '_')
@@ -170,7 +170,7 @@ def plot_individual_performance(model_results, model_name, best_threshold_model,
     print(f"Graph saved to '{save_path}'")
     plt.show() # Inline display
 
-def plot_comparison(summary_df, model_display_names=None):
+def plot_comparison(summary_df, model_display_names=None, title=None, plots_dir=None):
     print("Generating comparison plot...")
     
     # Enhance visualization style
@@ -209,7 +209,7 @@ def plot_comparison(summary_df, model_display_names=None):
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.6)
             )
 
-    plt.title('F1 Score Comparison Across Models', fontsize=18, fontweight='bold', pad=20)
+    plt.title(title or 'F1 Score Comparison Across Models', fontsize=18, fontweight='bold', pad=20)
     plt.xlabel('Cosine Similarity Threshold', fontsize=14)
     plt.ylabel('F1 Score', fontsize=14)
     
@@ -223,7 +223,7 @@ def plot_comparison(summary_df, model_display_names=None):
     
     plt.tight_layout()
     
-    plots_dir = 'results/plots'
+    plots_dir = plots_dir or 'results/plots'
     os.makedirs(plots_dir, exist_ok=True)
     save_path = os.path.join(plots_dir, 'performance_comparison.svg')
     

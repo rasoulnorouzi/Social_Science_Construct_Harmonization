@@ -9,18 +9,18 @@ DATA_PATHS = {
     {
         'pos_pairs': 'datasets/processed_datasets/elsst/train_positive_pairs.csv',
         'neg_pairs': 'datasets/processed_datasets/elsst/train_negative_pairs.csv',
-        'results_dir': 'elsst/results',
-        'plots_dir': 'elsst/results/plots',
-        'results_csv': 'elsst/results/cv_results.csv'
+        'results_csv': 'results/elsst/csv_reports',
+        'csv_reports': 'results/elsst/pairwise_results.csv',
+        'plots': 'results/elsst/plots'
     }
     ,
     'apa': 
     {
         'pos_pairs': 'datasets/processed_datasets/apa/train_positive_pairs.csv',
         'neg_pairs': 'datasets/processed_datasets/apa/train_negative_pairs.csv',
-        'results_dir': 'apa/results',
-        'plots_dir': 'apa/results/plots',
-        'results_csv': 'apa/results/cv_results.csv'
+        'results_csv': 'results/apa/csv_reports',
+        'plots': 'results/apa/plots'
+
     }
 }
 
@@ -51,9 +51,14 @@ MODELS = {
     }
 }
 
+# Batch size for encoding
+BATCH_SIZE = 16
+
 # Analysis Parameters
 # Thresholds: Range of cosine similarity thresholds to test
-THRESHOLDS = np.arange(0.10, 1.00, 0.01)
+PAIRWISE_PARAMS = {
+    'thresholds': np.arange(0.10, 1.00, 0.01)
+}
 
 # Clustering Parameters (HDBSCAN & UMAP)
 CLUSTERING_PARAMS = {
@@ -62,12 +67,12 @@ CLUSTERING_PARAMS = {
     'umap_n_components': [None, 2, 5, 10, 20, 50] # Dimensionality reduction target (None = Original)
 }
 
-# Batch size for encoding
-BATCH_SIZE = 16
+
 
 SEED_CLUSTER_PARAMS = {
     'n_initial_seeds_list': [10, 25, 50, 100, 250, 500],
-    'n_trials': 10
+    'n_trials': 10,
+    'thresholds': np.arange(0.10, 1.00, 0.01)
 }
 
 

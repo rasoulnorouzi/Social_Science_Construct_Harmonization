@@ -1,3 +1,4 @@
 datasets/processed_datasets/
 logs/
 datasets/raw_datasets
+taxonomy-dashboard/

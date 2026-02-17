@@ -205,7 +205,7 @@ def run_clustering_optimization(model_display_name, unique_terms, embeddings, df
     print(f"Best F1: {best_f1:.4f} with params {best_params}")
     return results, best_params
 
-def plot_clustering_heatmap(results_df, model_name):
+def plot_clustering_heatmap(results_df, model_name, plots_dir=None):
     """
     Plots a heatmap of F1 scores for hyperparameter sweep.
     Axes: Min Cluster Size vs. UMAP Dimensions
@@ -227,7 +227,7 @@ def plot_clustering_heatmap(results_df, model_name):
     plt.ylabel('Min Cluster Size')
     plt.tight_layout()
     
-    plots_dir = 'results/plots'
+    plots_dir = plots_dir or 'results/plots'
     os.makedirs(plots_dir, exist_ok=True)
     safe_name = model_name.replace('/', '_').replace('-', '_').replace(' ', '_')
     save_path = os.path.join(plots_dir, f'clustering_heatmap_{safe_name}.svg')
