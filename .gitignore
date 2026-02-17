@@ -2,3 +2,4 @@ datasets/processed_datasets/
 logs/
 datasets/raw_datasets
 taxonomy-dashboard/
+tests/test_output
