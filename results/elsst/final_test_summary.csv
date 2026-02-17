@@ -1,0 +1,13 @@
+Technique,Model,Precision,Recall,F1
+Clustering,All-MPNet-Base-v2,0.7016,0.5029,0.5859
+Clustering,MPNet-Personality,0.6845,0.4920,0.5725
+Clustering,SciBERT (SciVocab),0.6099,0.2922,0.3951
+Clustering,BERT Base,0.4820,0.2832,0.3568
+Pairwise,All-MPNet-Base-v2,0.7365,0.4811,0.5820
+Pairwise,MPNet-Personality,0.7070,0.4464,0.5472
+Pairwise,SciBERT (SciVocab),0.4797,0.2575,0.3351
+Pairwise,BERT Base,0.3911,0.1522,0.2191
+Seeded,All-MPNet-Base-v2,0.7587,0.4624,0.5746
+Seeded,MPNet-Personality,0.7341,0.3937,0.5125
+Seeded,SciBERT (SciVocab),0.1360,0.3648,0.1982
+Seeded,BERT Base,0.1558,0.3031,0.2058

@@ -230,6 +230,52 @@ def recall_on_subset(y_true, y_pred, mask):
     return recall_score(y_true, y_pred, zero_division=0)
 
 
+def compute_subset_metrics(y_true, y_pred, mask):
+    """
+    Compute comprehensive metrics on a boolean-masked subset using sklearn.
+    
+    Args:
+        y_true: Ground truth labels (full array).
+        y_pred: Predicted labels (full array).
+        mask: Boolean mask indicating which samples to include.
+    
+    Returns:
+        dict with keys: precision, recall, f1, tp, fp, tn, fn, fpr, n_subset
+    """
+    y_true_sub = np.asarray(y_true)[mask]
+    y_pred_sub = np.asarray(y_pred)[mask]
+    
+    if len(y_true_sub) == 0:
+        return {
+            'precision': 0.0, 'recall': 0.0, 'f1': 0.0,
+            'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0,
+            'fpr': 0.0, 'n_subset': 0
+        }
+    
+    # Compute sklearn metrics
+    precision = precision_score(y_true_sub, y_pred_sub, zero_division=0)
+    recall = recall_score(y_true_sub, y_pred_sub, zero_division=0)
+    f1 = f1_score(y_true_sub, y_pred_sub, zero_division=0)
+    
+    # Compute confusion matrix elements
+    tp, fp, tn, fn = confusion_counts(y_true_sub, y_pred_sub)
+    
+    # Compute FPR (False Positive Rate)
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    
+    return {
+        'precision': float(precision),
+        'recall': float(recall),
+        'f1': float(f1),
+        'tp': int(tp),
+        'fp': int(fp),
+        'tn': int(tn),
+        'fn': int(fn),
+        'fpr': float(fpr),
+        'n_subset': int(mask.sum())
+    }
+
+
 # ==========================================================================
 #  Correlation Helpers
 # ==========================================================================

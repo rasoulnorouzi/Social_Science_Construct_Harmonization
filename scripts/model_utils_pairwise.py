@@ -43,6 +43,29 @@ def compute_pairwise_similarities(model, df, batch_size=16):
     return np.array(similarities)
 
 
+def compute_pairwise_similarities_from_cache(norm_t, idx1_t, idx2_t):
+    """
+    Compute cosine similarities for pre-encoded, L2-normalised embeddings.
+
+    Mirrors :func:`compute_pairwise_similarities` for use when embeddings are
+    already cached in memory (model has been unloaded).  Uses the same
+    ``torch.nn.functional.cosine_similarity`` function as the reference
+    implementation, applied in a single vectorised batch.
+
+    Args:
+        norm_t:  torch.Tensor of shape (n_unique_terms, dim), L2-normalised.
+        idx1_t:  torch.Tensor of pair-first-term indices (long).
+        idx2_t:  torch.Tensor of pair-second-term indices (long).
+
+    Returns:
+        np.ndarray of cosine similarities, one per pair.
+    """
+    sims = torch.nn.functional.cosine_similarity(
+        norm_t[idx1_t], norm_t[idx2_t], dim=1
+    ).cpu().numpy()
+    return sims
+
+
 # ---------------------------------------------------------------------------
 # 2. Single-Run Evaluation (mirror model_utils_seed.py style)
 # ---------------------------------------------------------------------------
