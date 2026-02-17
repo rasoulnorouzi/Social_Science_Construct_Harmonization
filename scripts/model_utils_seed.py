@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer, util
-import model_utils_shared  
+from . import model_utils_shared  # Fixed relative import
 import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings

@@ -72,7 +72,7 @@ CLUSTERING_PARAMS = {
 SEED_CLUSTER_PARAMS = {
     'n_initial_seeds_list': [10, 25, 50, 100, 250, 500],
     'n_trials': 10,
-    'thresholds': np.arange(0.10, 1.00, 0.01)
+    'thresholds': np.arange(0.10, 1.00, 0.05)
 }
 
 
