@@ -11,59 +11,36 @@ from sklearn.metrics import precision_score, recall_score, f1_score, matthews_co
 # 1. Embedding Preparation
 # ---------------------------------------------------------------------------
 
-def compute_pairwise_similarities(model, df, batch_size=16):
+def compute_similarities(term_embeddings, term_to_idx, terms1, terms2, sim_batch_size=32768):
     """
-    Encode all unique terms and compute cosine similarities for every pair
-    in *df*.  Returns the similarity array (one value per row of *df*).
-    """
-    print("Building unique concept set...")
-    terms1 = df['term1'].tolist()
-    terms2 = df['term2'].tolist()
-    unique_terms = list(set(terms1) | set(terms2))
-
-    print(f"Encoding {len(unique_terms)} unique concepts...")
-    embeddings_raw = model.encode(
-        unique_terms, convert_to_tensor=True,
-        show_progress_bar=True, batch_size=batch_size
-    )
-    embeddings = torch.nn.functional.normalize(embeddings_raw, p=2, dim=1)
-
-    term_to_embedding = {term: emb for term, emb in zip(unique_terms, embeddings)}
-
-    print("Computing Cosine Similarities for pairs... it takes a few minutes...")
-   
-    similarities = []
-    for t1, t2 in zip(terms1, terms2):
-        sim = torch.nn.functional.cosine_similarity(
-            term_to_embedding[t1].unsqueeze(0),
-            term_to_embedding[t2].unsqueeze(0)
-        ).item()
-        similarities.append(sim)
-
-    return np.array(similarities)
-
-
-def compute_pairwise_similarities_from_cache(norm_t, idx1_t, idx2_t):
-    """
-    Compute cosine similarities for pre-encoded, L2-normalised embeddings.
-
-    Mirrors :func:`compute_pairwise_similarities` for use when embeddings are
-    already cached in memory (model has been unloaded).  Uses the same
-    ``torch.nn.functional.cosine_similarity`` function as the reference
-    implementation, applied in a single vectorised batch.
+    Compute cosine similarities for pairs using pre-computed, L2-normalised
+    embeddings and an index lookup map.
 
     Args:
-        norm_t:  torch.Tensor of shape (n_unique_terms, dim), L2-normalised.
-        idx1_t:  torch.Tensor of pair-first-term indices (long).
-        idx2_t:  torch.Tensor of pair-second-term indices (long).
+        term_embeddings: torch.Tensor of shape (n_unique_terms, dim), L2-normalised.
+        term_to_idx:     dict mapping each unique term to its row index in
+                         *term_embeddings*.
+        terms1:          list of first terms in each pair.
+        terms2:          list of second terms in each pair.
+        sim_batch_size:  Number of pairs to process per batch to avoid OOM
+                         errors (default 32 768).
 
     Returns:
         np.ndarray of cosine similarities, one per pair.
     """
-    sims = torch.nn.functional.cosine_similarity(
-        norm_t[idx1_t], norm_t[idx2_t], dim=1
-    ).cpu().numpy()
-    return sims
+    idx1 = torch.tensor([term_to_idx[t] for t in terms1], dtype=torch.long)
+    idx2 = torch.tensor([term_to_idx[t] for t in terms2], dtype=torch.long)
+
+    n = len(terms1)
+    chunks = []
+    for start in range(0, n, sim_batch_size):
+        end = min(start + sim_batch_size, n)
+        chunk = torch.nn.functional.cosine_similarity(
+            term_embeddings[idx1[start:end]], term_embeddings[idx2[start:end]], dim=1
+        ).cpu().numpy()
+        chunks.append(chunk)
+
+    return np.concatenate(chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +88,20 @@ def run_pairwise_optimization(model_name, model, df, batch_size=16,
         results:             list[dict] – one entry per threshold.
         best_threshold:      float – threshold that maximised F1.
     """
-    similarities = compute_pairwise_similarities(model, df, batch_size)
+    terms1 = df['term1'].tolist()
+    terms2 = df['term2'].tolist()
+    unique_terms = list(set(terms1) | set(terms2))
+    term_to_idx = {term: i for i, term in enumerate(unique_terms)}
+
+    print(f"\n--- Running pairwise optimisation for {model_name} ---")
+    print(f"Encoding {len(unique_terms)} unique concepts...")
+    embeddings_raw = model.encode(
+        unique_terms, convert_to_tensor=True,
+        show_progress_bar=True, batch_size=batch_size
+    )
+    term_embeddings = torch.nn.functional.normalize(embeddings_raw, p=2, dim=1)
+
+    similarities = compute_similarities(term_embeddings, term_to_idx, terms1, terms2)
     labels = df['label'].values
 
     print(f"\n--- Results per Threshold ({model_name}) ---")

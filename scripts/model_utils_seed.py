@@ -43,54 +43,55 @@ def seed_clustering(initial_seeds, remaining_terms, term_to_embedding, threshold
     current_seeds = list(initial_seeds)
     seeds_cluster = {seed: [seed] for seed in current_seeds}
 
-    seed_embeddings = torch.stack([term_to_embedding[seed] for seed in current_seeds])
+    # Running sums and counts allow O(1) centroid updates instead of
+    # re-stacking all cluster members on every assignment.
+    seed_sums   = {s: term_to_embedding[s].clone().float() for s in current_seeds}
+    seed_counts = {s: 1 for s in current_seeds}
+
+    # Maintain embeddings as a plain Python list so we can append without
+    # repeated torch.cat reallocation; rebuild the matrix only when its size
+    # has changed (dirty flag).
+    seed_emb_list  = [term_to_embedding[s].float() for s in current_seeds]
+    seed_embeddings = torch.stack(seed_emb_list)   # shape (n_seeds, dim)
+    dirty = False   # need to rebuild seed_embeddings from list?
     unclustered_count = 0
 
-    for i, term in enumerate(remaining_terms):
-        term_emb = term_to_embedding[term]
-        # print(f"term is : {term}")
-        # print(f"term_emb.shape: {term_emb.shape}")
-        
-        # Calculate cosine similarity against ALL current seeds
-        scores = util.cos_sim(term_emb, seed_embeddings)[0] 
-        # print(f"scores: {scores}")
-        # print(f"scores.shape: {scores.shape}")
-        
-        max_score, max_idx = torch.max(scores, dim=0)
-        # print(f"Max score: {max_score}, Max idx: {max_idx}")
-        
-        if max_score.item() > threshold:
-            # Case A: Found a matching cluster
-            best_seed_name = current_seeds[max_idx.item()]
-            # print(f"Best seed name: {best_seed_name}")
-            seeds_cluster[best_seed_name].append(term)
-            # print(f"seeds_cluster after adding term: {seeds_cluster}")
-            
-            # --- DYNAMIC UPDATE ---
-            # Re-calculate the centroid (mean) of this cluster
-            cluster_terms = seeds_cluster[best_seed_name]
-            # print(f"cluster_terms: {cluster_terms}")
-            cluster_embs = torch.stack([term_to_embedding[t] for t in cluster_terms])
-            # print(f"cluster_embs.shape: {cluster_embs.shape}")
-            new_mean_emb = torch.mean(cluster_embs, dim=0)
+    for term in remaining_terms:
+        term_emb = term_to_embedding[term].float()
 
-            # new_mean_emb = F.normalize(new_mean_emb, p=2, dim=0)
-            # print(f"new_mean_emb.shape: {new_mean_emb.shape}")
-            
-            # Update the seed_embeddings tensor row
-            seed_embeddings[max_idx] = new_mean_emb
-            # print(f"Updated seed_embeddings at index {max_idx}")
-            
+        # Rebuild matrix only when new seeds have been appended since last pass
+        if dirty:
+            seed_embeddings = torch.stack(seed_emb_list)
+            dirty = False
+
+        scores = util.cos_sim(term_emb.unsqueeze(0), seed_embeddings)[0]
+        max_score, max_idx = torch.max(scores, dim=0)
+
+        if max_score.item() > threshold:
+            # Case A: assign to best-matching cluster
+            best_seed_name = current_seeds[max_idx.item()]
+            seeds_cluster[best_seed_name].append(term)
+
+            # O(1) running-mean centroid update
+            seed_counts[best_seed_name] += 1
+            seed_sums[best_seed_name]   += term_emb
+            new_mean_emb = seed_sums[best_seed_name] / seed_counts[best_seed_name]
+
+            # Update in the list and in the existing tensor row (in-place safe)
+            idx = max_idx.item()
+            seed_emb_list[idx]    = new_mean_emb
+            seed_embeddings[idx]  = new_mean_emb
+
         else:
-            # Case B: No match found, create NEW cluster
+            # Case B: no match — start a new cluster
             current_seeds.append(term)
             seeds_cluster[term] = [term]
+            seed_sums[term]     = term_emb.clone()
+            seed_counts[term]   = 1
+            seed_emb_list.append(term_emb)
+            dirty = True            # rebuild tensor before next similarity pass
             unclustered_count += 1
-            # print(f"seeds_cluster after adding new seed: {seeds_cluster}")
-            
-            # Append the new seed embedding to our comparison tensor
-            seed_embeddings = torch.cat([seed_embeddings, term_emb.unsqueeze(0)], dim=0)
-    
+
     print(f"  Unclustered (new seeds created): {unclustered_count}")
     return seeds_cluster
 
