@@ -312,27 +312,66 @@ def pearson_corr(x, y):
     return float(np.corrcoef(x[mask], y[mask])[0, 1]), np.nan
 
 
-def point_biserial_corr(binary, continuous):
+def biserial_corr(binary, continuous):
     """
-    Point-biserial correlation between a binary variable and a continuous one.
+    Biserial correlation between a binary variable and a continuous one.
+    Handles imbalanced binary data better than point-biserial.
 
     Args:
         binary:      array-like of 0/1 values (e.g. same-cluster indicator).
         continuous:  array-like of continuous values (e.g. expert shortest path).
 
     Returns:
-        (r_pb, p_value)  or  (NaN, NaN) on failure.
+        r_b  or  NaN on failure.
     """
+    import scipy.stats as stats
     binary = np.asarray(binary, dtype=float)
     continuous = np.asarray(continuous, dtype=float)
     mask = np.isfinite(binary) & np.isfinite(continuous)
     if mask.sum() < 3:
-        return np.nan, np.nan
-    if pointbiserialr is not None:
-        r, p = pointbiserialr(binary[mask], continuous[mask])
-        return float(r), float(p)
-    # Fallback: point-biserial is equivalent to Pearson for dichotomous vars
-    return pearson_corr(binary[mask], continuous[mask])
+        return np.nan
+    
+    b_valid = binary[mask]
+    c_valid = continuous[mask]
+    
+    # Ensure binary is 0 and 1
+    unique_vals = np.unique(b_valid)
+    if len(unique_vals) != 2:
+        return np.nan
+        
+    val0, val1 = unique_vals[0], unique_vals[1]
+    
+    group1 = c_valid[b_valid == val1]
+    group0 = c_valid[b_valid == val0]
+    
+    p = len(group1) / len(c_valid)
+    q = 1.0 - p
+    
+    if p == 0 or q == 0:
+        return np.nan
+        
+    mean1 = np.mean(group1)
+    mean0 = np.mean(group0)
+    sy = np.std(c_valid, ddof=1)
+    
+    if sy == 0:
+        return np.nan
+        
+    # Find the z-score that splits the normal distribution into p and q
+    # stats.norm.ppf(q) gives the z-value where the CDF is q
+    z = stats.norm.ppf(q)
+    
+    # Ordinate (height) of the standard normal distribution at z
+    y = stats.norm.pdf(z)
+    
+    if y == 0:
+        return np.nan
+        
+    rb = ((mean1 - mean0) / sy) * (p * q / y)
+    
+    # Biserial correlation can sometimes exceed 1 or -1 in extreme cases,
+    # but we return the calculated value.
+    return float(rb)
 
 
 # ==========================================================================
