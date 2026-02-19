@@ -141,7 +141,7 @@ def load_model(model_name, model_type='sentence_transformer'):
     try:
         if model_type == 'token_embedding_mean_pool':
             word_embedding_model = models.Transformer(
-                model_name, model_args={'local_files_only': True}
+                model_name, model_args={'local_files_only': False}
             )
             pooling_model = models.Pooling(
                 word_embedding_model.get_word_embedding_dimension(),
@@ -152,7 +152,7 @@ def load_model(model_name, model_type='sentence_transformer'):
             )
         else:
             model = SentenceTransformer(
-                model_name, model_kwargs={'local_files_only': True}
+                model_name, model_kwargs={'local_files_only': False}
             )
         return model
     except Exception as e:
