@@ -1,7 +1,3 @@
-Here is the concise report in Markdown format, documenting the methodological decisions and threshold determinations for your study.
-
----
-
 # Methodological Report: Data Curation & Threshold Determination
 
 ## 1. Metric Selection
