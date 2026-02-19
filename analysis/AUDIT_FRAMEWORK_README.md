@@ -1,6 +1,6 @@
 # Psychometric Audit Framework for Concept Harmonisation
 
-This framework provides a **clean, reusable, and abstracted** system for evaluating machine learning models on concept harmonisation tasks. The code has been refactored from the original `final_testing.ipynb` notebook into modular, reusable components.
+
 
 ---
 
