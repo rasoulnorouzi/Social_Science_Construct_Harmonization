@@ -3,8 +3,6 @@ name: Deploy Concept Clustering App to GitHub Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'web-concept-clustering/**'
   workflow_dispatch:
 
 permissions:
