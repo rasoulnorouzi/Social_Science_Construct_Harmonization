@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept Integration &amp; Clustering</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/umap-js@1.3.3/lib/umap-js.min.js"></script>
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- ══ SIDEBAR ══════════════════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>Concept Clustering</h1>
+            <p class="subtitle">Browser-based &middot; No backend</p>
+        </div>
+
+        <!-- Model -->
+        <div class="param-section">
+            <div class="param-section-title">Embedding Model</div>
+            <select id="model-select" class="full-select">
+                <option value="Xenova/all-mpnet-base-v2">All-MPNet-Base-v2</option>
+                <option value="Xenova/mpnet-base">MPNet-Personality</option>
+                <option value="Xenova/bert-base-uncased">BERT Base Uncased</option>
+            </select>
+            <div class="hint" id="model-hint"></div>
+        </div>
+
+        <!-- Clustering Method -->
+        <div class="param-section">
+            <div class="param-section-title">Clustering Method</div>
+            <div class="method-toggle" id="method-toggle">
+                <button class="method-btn active" data-method="pairwise">Pairwise</button>
+                <button class="method-btn" data-method="hdbscan">HDBSCAN</button>
+            </div>
+        </div>
+
+        <!-- ── PAIRWISE PARAMS ─────────────────────── -->
+        <div id="params-pairwise" class="param-section param-panel">
+            <div class="param-section-title">Pairwise Parameters</div>
+
+            <label class="param-label">
+                Similarity Threshold
+                <span class="param-value" id="v-threshold">0.65</span>
+            </label>
+            <input type="range" id="threshold-input" class="slider" min="0.10" max="0.99" step="0.01" value="0.65">
+            <div class="hint">Links pairs with cosine sim &ge; threshold, then finds connected components.</div>
+        </div>
+
+        <!-- ── HDBSCAN PARAMS ───────────────────────── -->
+        <div id="params-hdbscan" class="param-section param-panel" style="display:none">
+            <div class="param-section-title">UMAP Hyperparameters</div>
+            <div class="hint mb4">Applied before clustering to reduce noise. Matches <code>config.py CLUSTERING_PARAMS</code>.</div>
+
+            <label class="param-label">
+                n_neighbors
+                <span class="param-value" id="v-umap-nn">15</span>
+            </label>
+            <input type="range" id="umap-nn" class="slider" min="2" max="50" step="1" value="15">
+            <div class="hint">Controls how many neighbours UMAP considers. Larger = more global structure.</div>
+
+            <label class="param-label mt8">
+                min_dist
+                <span class="param-value" id="v-umap-md">0.10</span>
+            </label>
+            <input type="range" id="umap-md" class="slider" min="0.00" max="0.50" step="0.01" value="0.10">
+            <div class="hint">Minimum distance between embedded points. Smaller = tighter packing.</div>
+
+            <label class="param-label mt8">
+                n_components (pre-cluster)
+                <span class="param-value" id="v-umap-nc">None</span>
+            </label>
+            <select id="umap-nc" class="full-select">
+                <option value="2">2</option>
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="0" selected>None (raw embeddings)</option>
+            </select>
+            <div class="hint">Dimensionality of UMAP space used as input to HDBSCAN (0 = skip UMAP pre-step, use raw cosine distance).</div>
+
+            <div class="param-section-title mt12">HDBSCAN Hyperparameters</div>
+
+            <label class="param-label">
+                cluster_selection_epsilon
+                <span class="param-value" id="v-eps">0.00</span>
+            </label>
+            <input type="range" id="eps-input" class="slider" min="0.00" max="0.99" step="0.01" value="0.00">
+            <div class="hint">Optional density floor for cluster selection (0 = disabled, i.e. pure EOM). Equivalent to sklearn&apos;s <code>cluster_selection_epsilon</code>.</div>
+
+            <label class="param-label mt8">
+                min_cluster_size
+                <span class="param-value" id="v-mcs">2</span>
+            </label>
+            <input type="range" id="mcs-input" class="slider" min="2" max="20" step="1" value="2">
+            <div class="hint">Minimum concepts to form a cluster.</div>
+
+            <label class="param-label mt8">
+                min_samples
+                <span class="param-value" id="v-ms">2</span>
+            </label>
+            <input type="range" id="ms-input" class="slider" min="1" max="20" step="1" value="2">
+            <div class="hint">Minimum neighbours for a core point. Higher = more conservative, more noise.</div>
+        </div>
+
+        <!-- Concepts input -->
+        <div class="param-section">
+            <div class="param-section-title">
+                Concepts
+                <span class="badge" id="concept-count">0</span>
+            </div>
+            <textarea id="concepts-input" class="concepts-box" spellcheck="false" placeholder="One concept per line…">social class
+socioeconomic status
+income level
+wealth
+education
+schooling
+academic achievement
+mental health
+depression
+anxiety
+psychological well-being
+sleep disorder
+insomnia</textarea>
+        </div>
+
+        <button id="process-btn" class="run-btn">&#9654;&nbsp; Run Analysis</button>
+
+        <!-- Progress -->
+        <div id="progress-wrap" style="display:none" class="progress-wrap">
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
+            <div class="status-msg" id="status">Ready</div>
+        </div>
+        <div id="status-idle" class="status-msg">Ready</div>
+    </aside>
+
+    <!-- ══ MAIN AREA ═════════════════════════════════════════════════════════ -->
+    <main class="main-area">
+        <div class="tabs-bar">
+            <button class="tab-btn active" data-target="tab-vis">&#128202; Visualization</button>
+            <button class="tab-btn" data-target="tab-report">&#128203; Clusters &amp; Pairs</button>
+            <button class="tab-btn" data-target="tab-matrix">&#127863; Similarity Matrix</button>
+            <div class="tabs-right">
+                <button id="export-btn" class="export-btn" style="display:none">&#8659; Export JSON</button>
+            </div>
+        </div>
+
+        <div id="tab-vis" class="tab-content active">
+            <div id="plot-container" class="plot-container"></div>
+        </div>
+
+        <div id="tab-report" class="tab-content">
+            <div class="report-scroll">
+                <div id="clusters-report"></div>
+                <div id="pairs-report"></div>
+            </div>
+        </div>
+
+        <div id="tab-matrix" class="tab-content">
+            <div id="matrix-container" class="plot-container"></div>
+            <div id="matrix-warn" class="matrix-warn" style="display:none"></div>
+        </div>
+    </main>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
