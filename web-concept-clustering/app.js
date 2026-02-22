@@ -1,4 +1,4 @@
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+import { pipeline, env, AutoTokenizer, AutoModelForSequenceClassification } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
 
 env.allowLocalModels = false;
 
@@ -47,7 +47,17 @@ const elsstQuery    = document.getElementById('elsst-query');
 const elsstCacheSt  = document.getElementById('elsst-cache-status');
 const elsstResults  = document.getElementById('elsst-results');
 const elsstModelSel = document.getElementById('elsst-model-select');
-const l2Toggle      = document.getElementById('l2-toggle');
+const elsstStratSel = document.getElementById('elsst-strategy-select');
+const strategyHint  = document.getElementById('strategy-hint');
+
+const rerankToggle  = document.getElementById('rerank-toggle');
+const rerankPoolRow = document.getElementById('rerank-pool-row');
+
+// Show / hide Stage-1 pool slider when re-ranking toggle changes
+rerankToggle.addEventListener('change', () => {
+    rerankPoolRow.style.display = rerankToggle.checked ? '' : 'none';
+});
+syncSlider('pool-input', 'v-pool', v => v);
 
 // ─── Slider sync helper ───────────────────────────────────────────────────────
 function syncSlider(inputId, valueId, transform = v => v) {
@@ -782,7 +792,16 @@ async function processConcepts() {
 //
 // ELSST model registry — maps model keys to their Xenova browser models
 const ELSST_MODELS = {
-    'allmpnet': { browser: 'Xenova/all-mpnet-base-v2', display: 'All-MPNet-Base-v2' }
+    'allmpnet':  { browser: 'Xenova/all-mpnet-base-v2',   display: 'All-MPNet-Base-v2 (768d)' },
+    'bge_small': { browser: 'Xenova/bge-small-en-v1.5',   display: 'BGE-Small-EN v1.5 (384d)' },
+    'bge_base':  { browser: 'Xenova/bge-base-en-v1.5',    display: 'BGE-Base-EN v1.5 (768d)' },
+};
+
+const ELSST_STRATEGIES = {
+    'leaf':    { display: 'Leaf Only',      hint: 'Embeds only the leaf concept name — strongest direct semantic match.' },
+    'path':    { display: 'Full Path',      hint: 'Embeds the full root→leaf path (e.g. "A > B > C") — hierarchical context.' },
+    'anchor':  { display: 'Leaf-Anchored',  hint: 'Leaf prepended to the full path ("C: A > B > C") — emphasises leaf + context.' },
+    'context': { display: 'Contextual',     hint: 'Natural-language framing ("C is related to B, A") — best for free-text queries.' },
 };
 
 // Cache store: { '<key>_raw': ..., '<key>_l2': ..., paths: [...] }
@@ -791,14 +810,19 @@ let elsstPathsLoaded = false;
 
 async function loadElsstCache() {
     const modelKey = elsstModelSel.value;
-    const useL2    = l2Toggle.checked;
-    const suffix   = useL2 ? '_l2' : '';
-    const cacheKey = `${modelKey}${suffix}`;
+    const stratKey = elsstStratSel.value;
+    const suffix   = '_l2';
+    const cacheKey = `${modelKey}_${stratKey}${suffix}`;
+
+    // Update strategy hint
+    if (strategyHint && ELSST_STRATEGIES[stratKey]) {
+        strategyHint.textContent = ELSST_STRATEGIES[stratKey].hint;
+    }
 
     // Already loaded?
     if (elsstCacheStore[cacheKey] && elsstPathsLoaded) {
         const c = elsstCacheStore[cacheKey];
-        elsstCacheSt.textContent = `Cache ready: ${c.n} paths · ${ELSST_MODELS[modelKey].display} · ${useL2 ? 'L2' : 'raw'}`;
+        elsstCacheSt.textContent = `Cache ready: ${c.n} paths · ${ELSST_MODELS[modelKey].display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
         return;
     }
 
@@ -812,8 +836,8 @@ async function loadElsstCache() {
             elsstPathsLoaded = true;
         }
 
-        // Load model-specific embeddings
-        const binFile = `elsst_embeddings_${modelKey}${suffix}.bin`;
+        // Load model+strategy specific embeddings
+        const binFile = `elsst_embeddings_${modelKey}_${stratKey}${suffix}.bin`;
         const binResp = await fetch(binFile);
         if (!binResp.ok) throw new Error(`${binFile} not found. Run build_elsst_cache.py first.`);
 
@@ -829,16 +853,86 @@ async function loadElsstCache() {
         }
 
         elsstCacheStore[cacheKey] = { embeddings, dim, n };
-        elsstCacheSt.textContent = `Cache ready: ${n} paths · ${ELSST_MODELS[modelKey].display} · ${useL2 ? 'L2' : 'raw'}`;
+        elsstCacheSt.textContent = `Cache ready: ${n} paths · ${ELSST_MODELS[modelKey].display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
     } catch (err) {
         elsstCacheSt.textContent = `Error: ${err.message}`;
         console.error('ELSST cache load error:', err);
     }
 }
 
-// Reload cache when model or L2 toggle changes
+// Reload cache when model or strategy changes
 elsstModelSel.addEventListener('change', () => loadElsstCache());
-l2Toggle.addEventListener('change', () => loadElsstCache());
+elsstStratSel.addEventListener('change', () => loadElsstCache());
+
+// ─── Query preprocessing ──────────────────────────────────────────────────────
+// Remove functional / grammar words that add no semantic value when matching
+// against taxonomy-style concept labels, while PRESERVING:
+//   • polarity words (not, no, never, decline, loss, …)
+//   • degree modifiers (very, sharply, highly, …)
+//   • content nouns, verbs, adjectives
+const ELSST_STOPWORDS = new Set([
+    // articles
+    'a', 'an', 'the',
+    // pronouns
+    'i', 'me', 'my', 'mine', 'myself', 'we', 'us', 'our', 'ours', 'ourselves',
+    'you', 'your', 'yours', 'yourself', 'yourselves',
+    'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself',
+    'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
+    // copulas / light auxiliaries
+    'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+    'has', 'have', 'had', 'having',
+    'do', 'does', 'did',
+    'will', 'shall', 'would', 'should', 'could', 'might', 'may', 'can',
+    // prepositions / conjunctions
+    'of', 'in', 'to', 'for', 'with', 'on', 'at', 'from', 'by', 'about',
+    'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+    'between', 'under', 'along', 'until', 'upon', 'toward', 'towards',
+    'and', 'but', 'or', 'nor', 'so', 'yet', 'both', 'either', 'neither',
+    // demonstratives / existentials
+    'this', 'that', 'these', 'those', 'there', 'here',
+    // relative / interrogative
+    'who', 'whom', 'whose', 'which', 'what', 'where', 'when', 'how',
+    // misc function words
+    'also', 'just', 'then', 'than', 'such', 'own', 'same',
+    'each', 'every', 'any', 'some', 'other', 'another',
+    // contractions (after lowercasing the apostrophe often stays)
+    "'s", "'re", "'ve", "'ll", "'d", "'m",
+]);
+
+// Words we explicitly KEEP even if they look short / common.
+// Covers polarity, negation, intensity, and direction.
+const PRESERVE_WORDS = new Set([
+    'not', 'no', 'nor', 'never', 'none', 'nothing', 'nowhere', 'neither',
+    'without', 'against', 'lack', 'loss', 'fail', 'failed', 'failure',
+    'decline', 'declined', 'declining', 'decrease', 'decreased',
+    'drop', 'dropped', 'fall', 'fell', 'fallen', 'reduce', 'reduced',
+    'low', 'lower', 'lowest', 'less', 'fewer', 'poor', 'poorly', 'weak',
+    'negative', 'negatively', 'bad', 'badly', 'worse', 'worst',
+    'high', 'higher', 'highest', 'increase', 'increased', 'rise', 'risen',
+    'more', 'most', 'better', 'best', 'good', 'well', 'strong', 'strongly',
+    'positive', 'positively',
+    'very', 'sharply', 'rapidly', 'significantly', 'extremely', 'highly',
+    'slightly', 'gradually', 'steadily', 'dramatically', 'severely',
+]);
+
+function preprocessQuery(raw) {
+    // 1. Lowercase
+    let text = raw.toLowerCase();
+    // 2. Remove possessive 's and common contractions
+    text = text.replace(/\b(\w+)'s\b/g, '$1');
+    text = text.replace(/n't\b/g, ' not');
+    text = text.replace(/['\u2018\u2019\u2032]/g, "'");
+    // 3. Strip non-alpha chars (keep spaces and hyphens)
+    text = text.replace(/[^a-z\s-]/g, ' ');
+    // 4. Tokenize
+    const tokens = text.split(/\s+/).filter(Boolean);
+    // 5. Remove stopwords, but preserve polarity / semantic words
+    const cleaned = tokens.filter(t =>
+        PRESERVE_WORDS.has(t) || !ELSST_STOPWORDS.has(t)
+    );
+    // 6. If everything was stripped, fall back to original tokens
+    return cleaned.length > 0 ? cleaned.join(' ') : tokens.join(' ');
+}
 
 function elsstDotProduct(a, b) {
     let d = 0;
@@ -859,12 +953,14 @@ function elsstCosineSim(a, b) {
 async function searchELSST() {
     const rawQuery = elsstQuery.value.trim();
     if (!rawQuery) { alert('Please enter a query term.'); return; }
-    const query  = rawQuery.toLowerCase();  // always lowercase for matching
+    const query  = preprocessQuery(rawQuery);     // cleaned for bi-encoder
+    const queryRaw = rawQuery.toLowerCase();       // original for cross-encoder
+    console.log(`[ELSST] raw: "${queryRaw}"  →  cleaned: "${query}"`);
     const topK   = parseInt(document.getElementById('topk-input').value, 10);
-    const useL2  = l2Toggle.checked;
     const modelKey = elsstModelSel.value;
-    const suffix = useL2 ? '_l2' : '';
-    const cacheKey = `${modelKey}${suffix}`;
+    const stratKey = elsstStratSel.value;
+    const suffix = '_l2';
+    const cacheKey = `${modelKey}_${stratKey}${suffix}`;
 
     try {
         elsstBtn.disabled = true;
@@ -881,16 +977,12 @@ async function searchELSST() {
 
         setProgress(40, `Embedding query: "${query}"…`);
         const out = await extractor(query, { pooling: 'mean', normalize: false });
-        let queryEmb = Array.from(out.data);
-
-        // Apply L2 normalization to query if toggle is on
-        if (useL2) {
-            queryEmb = l2Normalize(queryEmb);
-        }
+        let queryEmb = l2Normalize(Array.from(out.data));
 
         // Compute similarity against all cached path embeddings
-        setProgress(60, `Comparing against ${cache.n} paths…`);
-        const simFn = useL2 ? elsstDotProduct : elsstCosineSim;
+        // Both query and cache are L2-normalized → dot product = cosine similarity
+        setProgress(60, `Stage 1: comparing against ${cache.n} paths…`);
+        const simFn = elsstDotProduct;
         const scores = [];
         for (let i = 0; i < cache.n; i++) {
             scores.push({
@@ -902,20 +994,65 @@ async function searchELSST() {
         // Sort descending
         scores.sort((a, b) => b.similarity - a.similarity);
 
-        // ── Deduplicate by leaf: keep only the best-scoring path per leaf ──
+        const useRerank = rerankToggle.checked;
+        // Stage-1 pool: how many candidates the bi-encoder retrieves for the CE
+        const poolSize  = useRerank
+            ? Math.max(parseInt(document.getElementById('pool-input').value, 10), topK)
+            : topK;
+
+        // ── Stage 1: Deduplicate by leaf, collect poolSize best bi-encoder hits ──
         const seenLeaves = new Set();
-        const deduped = [];
+        let deduped = [];
         for (const s of scores) {
             const leaf = paths[s.idx].leaf;
             if (!seenLeaves.has(leaf)) {
                 seenLeaves.add(leaf);
                 deduped.push(s);
             }
-            if (deduped.length >= topK) break;
+            if (deduped.length >= poolSize) break;
         }
 
-        setProgress(85, 'Rendering results…');
-        renderElsstResults(rawQuery, deduped, topK, modelKey, useL2, paths, cache.n);
+        // ── Stage 2: Cross-Encoder Re-ranking ────────────────────────────
+        if (useRerank && deduped.length > 1) {
+            setProgress(70, `Loading cross-encoder (${deduped.length} candidates)…`);
+            if (!window._rerankTokenizer) {
+                window._rerankTokenizer = await AutoTokenizer.from_pretrained('Xenova/ms-marco-MiniLM-L-6-v2');
+                window._rerankModel     = await AutoModelForSequenceClassification.from_pretrained('Xenova/ms-marco-MiniLM-L-6-v2');
+            }
+            const rrTokenizer = window._rerankTokenizer;
+            const rrModel     = window._rerankModel;
+
+            setProgress(82, `Stage 2: re-ranking ${deduped.length} candidates…`);
+            // Score each (query, passage) pair individually.
+            // Cross-encoder receives the ORIGINAL user query (full semantics +
+            // polarity) paired against the same strategy text used for caching.
+            for (let pi = 0; pi < deduped.length; pi++) {
+                const entry   = paths[deduped[pi].idx];
+                // Use the same path text the cache was built from
+                const passage = entry.path.toLowerCase();
+                const inputs  = rrTokenizer(queryRaw, {
+                    text_pair:  passage,
+                    padding:    true,
+                    truncation: true,
+                });
+                const { logits } = await rrModel(inputs);
+                const rawLogit = logits.data[0];
+                deduped[pi].biencScore  = deduped[pi].similarity;
+                deduped[pi].rerankLogit = rawLogit;              // raw logit for ranking
+                deduped[pi].rerankScore = 1 / (1 + Math.exp(-rawLogit)); // sigmoid for display
+            }
+            console.log('[ELSST rerank]', deduped.map(r =>
+                `${paths[r.idx].leaf}: logit=${r.rerankLogit.toFixed(3)} sig=${r.rerankScore.toFixed(4)} bienc=${r.biencScore.toFixed(4)}`
+            ));
+            // Re-order by raw logit (higher = more relevant)
+            deduped.sort((a, b) => b.rerankLogit - a.rerankLogit);
+        }
+
+        // Slice to the final requested top-K
+        deduped = deduped.slice(0, topK);
+
+        setProgress(90, 'Rendering results…');
+        renderElsstResults(rawQuery, query, deduped, topK, poolSize, modelKey, stratKey, useRerank, paths, cache.n);
 
         // Switch to ELSST tab
         tabBtns.forEach(b => b.classList.remove('active'));
@@ -933,21 +1070,55 @@ async function searchELSST() {
     }
 }
 
-function renderElsstResults(query, topResults, topK, modelKey, useL2, paths, nPaths) {
-    const modelName = ELSST_MODELS[modelKey].display;
-    const normLabel = useL2 ? 'L2-normalized (cosine)' : 'raw (dot product)';
+function renderElsstResults(query, cleanedQuery, topResults, topK, poolSize, modelKey, stratKey, useRerank, paths, nPaths) {
+    const modelName  = ELSST_MODELS[modelKey].display;
+    const stratName  = ELSST_STRATEGIES[stratKey].display;
+    const normLabel  = 'L2-normalized (cosine)';
+    const rerankBadge = useRerank
+        ? ` · <span class="rerank-badge">&#x2605; Cross-Encoder Re-ranked (pool ${poolSize} → top ${topK})</span>`
+        : '';
+    const cleanedNote = (cleanedQuery !== query.toLowerCase())
+        ? `<div class="param-pill" style="margin-top:4px">Cleaned query: <strong>"${cleanedQuery}"</strong> (stopwords removed; polarity preserved)</div>`
+        : '';
 
     let html = `<div class="report-section">
         <h3>ELSST Hierarchy Lookup &nbsp;<small>Query: "${query}" · Top ${topK}</small></h3>
-        <div class="param-pill">Model: ${modelName} · ${nPaths} root→leaf paths · ${normLabel} · duplicates collapsed</div>
+        <div class="param-pill">Model: ${modelName} · Strategy: ${stratName} · ${nPaths} root→leaf paths · ${normLabel} · duplicates collapsed${rerankBadge}</div>
+        ${cleanedNote}
         <div class="elsst-results-list">`;
+
+    // When re-ranking, the ms-marco cross-encoder produces very negative logits
+    // for short taxonomy labels (trained on web passages, not thesaurus terms).
+    // Absolute sigmoid values near 0 are expected — the RANKING is meaningful.
+    // Use min-max normalisation of raw logits for the sim-bar so relative
+    // differences are visible; display the raw logit as the primary score.
+    let logitMin = 0, logitRange = 1;
+    if (useRerank && topResults.length > 1) {
+        logitMin = Math.min(...topResults.map(r => r.rerankLogit));
+        const logitMax = Math.max(...topResults.map(r => r.rerankLogit));
+        logitRange = (logitMax - logitMin) || 1;
+    }
 
     topResults.forEach((r, rank) => {
         const entry = paths[r.idx];
         const pathParts = entry.path.split(' > ');
         const leaf = pathParts[pathParts.length - 1];
         const parents = pathParts.slice(0, -1);
-        const simPct = Math.round(Math.max(0, r.similarity) * 100);
+
+        let simPct, primaryLabel, scoreDetail;
+        if (useRerank) {
+            // Bar reflects relative rank within this candidate set
+            simPct = Math.round(((r.rerankLogit - logitMin) / logitRange) * 100);
+            primaryLabel = `logit ${r.rerankLogit.toFixed(2)}`;
+            scoreDetail = `<div class="score-detail">` +
+                `Cross-encoder logit: <strong>${r.rerankLogit.toFixed(3)}</strong>` +
+                ` &nbsp;<span style="opacity:.65">(sigmoid&nbsp;${r.rerankScore.toFixed(4)}, bar&nbsp;is&nbsp;relative)</span>` +
+                ` &nbsp;|&nbsp; Bi-encoder: ${r.biencScore.toFixed(4)}</div>`;
+        } else {
+            simPct = Math.round(Math.max(0, r.similarity) * 100);
+            primaryLabel = r.similarity.toFixed(4);
+            scoreDetail = '';
+        }
 
         html += `<div class="elsst-result-card">
             <div class="elsst-rank">#${rank + 1}</div>
@@ -960,8 +1131,9 @@ function renderElsstResults(query, topResults, topK, modelKey, useL2, paths, nPa
                 </div>
                 <div class="sim-bar-wrap">
                     <div class="sim-bar" style="width:${simPct}%"></div>
-                    <span class="similarity-score">${r.similarity.toFixed(4)}</span>
+                    <span class="similarity-score">${primaryLabel}</span>
                 </div>
+                ${scoreDetail}
             </div>
         </div>`;
     });

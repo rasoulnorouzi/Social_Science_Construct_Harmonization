@@ -111,13 +111,24 @@
         <!-- ── ELSST LOOKUP PARAMS ─────────────────── -->
         <div id="params-elsst" class="param-section param-panel" style="display:none">
             <div class="param-section-title">ELSST Hierarchy Lookup</div>
-            <div class="hint mb4">Search the ELSST thesaurus hierarchy. Each concept is embedded as a full root→leaf path (e.g. <code>buildings&nbsp;&gt;&nbsp;residential buildings&nbsp;&gt;&nbsp;domestic safety</code>). Returns the most similar <strong>leaf</strong> concepts. Duplicate leaves are collapsed to the best-scoring path.</div>
+            <div class="hint mb4">Search the ELSST thesaurus hierarchy. Each concept’s root→leaf path is embedded using a selectable <strong>strategy</strong>. Returns the most similar <strong>leaf</strong> concepts. Duplicate leaves are collapsed to the best-scoring path.</div>
 
             <label class="param-label mt8">ELSST Model</label>
             <select id="elsst-model-select" class="full-select">
-                <option value="allmpnet" selected>All-MPNet-Base-v2</option>
+                <option value="allmpnet">All-MPNet-Base-v2 (768d)</option>
+                <option value="bge_small" selected>BGE-Small-EN v1.5 (384d) — recommended</option>
+                <option value="bge_base">BGE-Base-EN v1.5 (768d) — highest quality</option>
             </select>
-            <div class="hint">Determines which pre-computed embedding cache to load.</div>
+            <div class="hint">Embedding model for both pre-computed paths and browser query. BGE models score higher on semantic benchmarks.</div>
+
+            <label class="param-label mt8">Path Strategy</label>
+            <select id="elsst-strategy-select" class="full-select">
+                <option value="leaf">Leaf Only &mdash; direct semantic match</option>
+                <option value="path">Full Path &mdash; hierarchical context</option>
+                <option value="anchor" selected>Leaf-Anchored &mdash; leaf emphasis + context</option>
+                <option value="context">Contextual &mdash; natural-language framing</option>
+            </select>
+            <div id="strategy-hint" class="hint">How each concept’s path is converted to text before embedding.</div>
 
             <label class="param-label mt8">
                 Top-K Results
@@ -127,9 +138,22 @@
             <div class="hint">Number of similar leaf concepts to return.</div>
 
             <div class="toggle-row mt8">
-                <label class="toggle-label" for="l2-toggle">L2 Normalize</label>
-                <input type="checkbox" id="l2-toggle" class="toggle-check" checked>
-                <div class="hint" style="margin-top:2px">When enabled, uses L2-normalized embeddings (cosine similarity). When disabled, uses raw embeddings (dot product).</div>
+                <label class="toggle-label" for="rerank-toggle">Cross-Encoder Re-ranking</label>
+                <input type="checkbox" id="rerank-toggle" class="toggle-check">
+                <div class="hint" style="margin-top:2px">
+                    <strong>Stage&nbsp;1</strong>: bi-encoder retrieves the top-N candidates.
+                    <strong>Stage&nbsp;2</strong>: <code>ms-marco-MiniLM-L-6-v2</code> deeply scores each (query, concept) pair and re-orders the list.
+                    Slower on first use (model download), but significantly more accurate for nuanced free-text queries.
+                </div>
+            </div>
+
+            <div id="rerank-pool-row" style="display:none">
+                <label class="param-label mt8">
+                    Stage-1 Retrieval Pool
+                    <span class="param-value" id="v-pool">5</span>
+                </label>
+                <input type="range" id="pool-input" class="slider" min="3" max="20" step="1" value="5">
+                <div class="hint">How many candidates the bi-encoder retrieves before the cross-encoder re-ranks them. Must be &ge; Top-K.</div>
             </div>
 
             <label class="param-label mt8">Query Term</label>

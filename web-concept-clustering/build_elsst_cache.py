@@ -2,16 +2,16 @@
 Build ELSST root-to-leaf embedding cache for the web-concept-clustering app.
 
 Parses ELSST_R5.rdf, extracts the SKOS hierarchy, finds all leaf concepts,
-builds full root→leaf path strings, embeds each path with MULTIPLE models,
-and saves per-model cache files.
+builds full root→leaf path strings, and embeds each path under MULTIPLE
+strategies (leaf-only, full-path, leaf-anchored, contextual), saving
+separate cache files for each combination.
 
-Outputs (per model):
-  - elsst_paths.json                     (shared metadata, original-case for display)
-  - elsst_embeddings_<model_key>.bin     (raw Float32, n×dim)
-  - elsst_embeddings_<model_key>_l2.bin  (L2-normalized Float32, n×dim)
+Outputs:
+  - elsst_paths.json                                   (shared metadata)
+  - elsst_embeddings_<model>_<strategy>.bin             (raw Float32)
+  - elsst_embeddings_<model>_<strategy>_l2.bin          (L2-normalized)
 
-Embeddings are computed on LOWERCASED path strings for case-insensitive
-matching, since users typically input lowercase queries.
+Embeddings are computed on LOWERCASED text for case-insensitive matching.
 
 Usage:
     cd web-concept-clustering/
@@ -35,14 +35,42 @@ OUT_DIR  = os.path.dirname(__file__) or '.'
 LANG = 'en'  # use English prefLabels only
 
 # Models to build caches for.
-# key: short identifier (used in filenames and JS model selector)
-# python_model: HuggingFace model name for embedding
-# browser_model: Xenova model name used in the browser
 MODELS = {
     'allmpnet': {
         'python_model':  'all-mpnet-base-v2',
         'browser_model': 'Xenova/all-mpnet-base-v2',
         'display_name':  'All-MPNet-Base-v2',
+    },
+    'bge_small': {
+        'python_model':  'BAAI/bge-small-en-v1.5',
+        'browser_model': 'Xenova/bge-small-en-v1.5',
+        'display_name':  'BGE-Small-EN v1.5',
+    },
+    'bge_base': {
+        'python_model':  'BAAI/bge-base-en-v1.5',
+        'browser_model': 'Xenova/bge-base-en-v1.5',
+        'display_name':  'BGE-Base-EN v1.5',
+    },
+}
+
+# Path representation strategies.
+# Each strategy produces a different text string from the same path.
+STRATEGIES = {
+    'leaf': {
+        'display': 'Leaf Only',
+        'description': 'Embed only the leaf concept name — strongest direct semantic match.',
+    },
+    'path': {
+        'display': 'Full Path',
+        'description': 'Embed the full root→leaf path (e.g. "A > B > C") — provides hierarchical context.',
+    },
+    'anchor': {
+        'display': 'Leaf-Anchored',
+        'description': 'Leaf name prepended to the full path ("C: A > B > C") — emphasises the leaf while keeping context.',
+    },
+    'context': {
+        'display': 'Contextual',
+        'description': 'Natural-language framing ("C is related to B, A") — best for free-text queries.',
     },
 }
 
@@ -161,20 +189,35 @@ def build_root_to_leaf_paths(labels, children, parents, top_concepts):
     return deduped
 
 
-def compute_embeddings(paths_data, model_cfg):
-    """Compute RAW embeddings (no L2 norm) for lowercased path strings."""
-    model_name = model_cfg['python_model']
-    path_strings = [d['path_lower'] for d in paths_data]
+def strategy_text(entry, strategy_key):
+    """Produce the text string for a given path entry and strategy."""
+    leaf = entry['leaf'].lower()
+    path_lower = entry['path_lower']          # "a > b > c"
+    parts = [p.strip() for p in entry['path'].lower().split('>')]
+    parents = parts[:-1]                       # everything except the leaf
 
-    print(f'Loading model {model_name} ...')
-    model = SentenceTransformer(model_name)
-    print(f'Embedding {len(path_strings)} lowercased paths ...')
+    if strategy_key == 'leaf':
+        return leaf
+    elif strategy_key == 'path':
+        return path_lower
+    elif strategy_key == 'anchor':
+        return f'{leaf}: {path_lower}'
+    elif strategy_key == 'context':
+        if parents:
+            return f'{leaf} is related to {", ".join(reversed(parents))}'
+        return leaf
+    else:
+        raise ValueError(f'Unknown strategy: {strategy_key}')
+
+
+def compute_embeddings(texts, model):
+    """Compute RAW embeddings (no L2 norm) for a list of text strings."""
+    print(f'  Embedding {len(texts)} texts ...')
     embeddings = model.encode(
-        path_strings,
+        texts,
         show_progress_bar=True,
         normalize_embeddings=False,
     )
-
     print(f'  Embedding shape: {embeddings.shape}')
     return embeddings.astype(np.float32)
 
@@ -227,20 +270,29 @@ def main():
     # Save shared metadata once
     save_cache(paths_data, out_dir)
 
-    # Build embeddings for each model
+    # Build embeddings for each model × strategy combination
     for model_key, model_cfg in MODELS.items():
-        print(f'\n{"="*60}')
-        print(f'Model: {model_cfg["display_name"]} ({model_key})')
-        print(f'{"="*60}')
+        print(f'\nLoading model {model_cfg["python_model"]} ...')
+        model = SentenceTransformer(model_cfg['python_model'])
 
-        raw_embs = compute_embeddings(paths_data, model_cfg)
-        l2_embs  = l2_normalize(raw_embs)
+        for strat_key, strat_cfg in STRATEGIES.items():
+            print(f'\n{"="*60}')
+            print(f'Model: {model_cfg["display_name"]} ({model_key})  |  Strategy: {strat_cfg["display"]} ({strat_key})')
+            print(f'{"="*60}')
 
-        raw_path = os.path.join(out_dir, f'elsst_embeddings_{model_key}.bin')
-        l2_path  = os.path.join(out_dir, f'elsst_embeddings_{model_key}_l2.bin')
+            texts = [strategy_text(d, strat_key) for d in paths_data]
+            # Show a few examples
+            for t in texts[:3]:
+                print(f'  e.g. "{t}"')
 
-        save_binary(raw_embs, raw_path)
-        save_binary(l2_embs,  l2_path)
+            raw_embs = compute_embeddings(texts, model)
+            l2_embs  = l2_normalize(raw_embs)
+
+            raw_path = os.path.join(out_dir, f'elsst_embeddings_{model_key}_{strat_key}.bin')
+            l2_path  = os.path.join(out_dir, f'elsst_embeddings_{model_key}_{strat_key}_l2.bin')
+
+            save_binary(raw_embs, raw_path)
+            save_binary(l2_embs,  l2_path)
 
     print(f'\nDone! All cache files saved to {out_dir}/')
 
