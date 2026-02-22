@@ -138,7 +138,7 @@
 
             <div class="toggle-row mt8">
                 <label class="toggle-label" for="rerank-toggle">Cross-Encoder Re-ranking</label>
-                <input type="checkbox" id="rerank-toggle" class="toggle-check">
+                <input type="checkbox" checked="checked" id="rerank-toggle" class="toggle-check">
                 <div class="hint" style="margin-top:2px">
                     <strong>Stage&nbsp;1</strong>: bi-encoder retrieves the top-N candidates.
                     <strong>Stage&nbsp;2</strong>: <code>ms-marco-MiniLM-L-6-v2</code> deeply scores each (query, concept) pair and re-orders the list.
