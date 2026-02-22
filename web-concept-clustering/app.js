@@ -793,7 +793,6 @@ async function processConcepts() {
 // ELSST model registry — maps model keys to their Xenova browser models
 const ELSST_MODELS = {
     'allmpnet':  { browser: 'Xenova/all-mpnet-base-v2',   display: 'All-MPNet-Base-v2 (768d)' },
-    'bge_small': { browser: 'Xenova/bge-small-en-v1.5',   display: 'BGE-Small-EN v1.5 (384d)' },
     'bge_base':  { browser: 'Xenova/bge-base-en-v1.5',    display: 'BGE-Base-EN v1.5 (768d)' },
 };
 

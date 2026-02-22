@@ -41,11 +41,6 @@ MODELS = {
         'browser_model': 'Xenova/all-mpnet-base-v2',
         'display_name':  'All-MPNet-Base-v2',
     },
-    'bge_small': {
-        'python_model':  'BAAI/bge-small-en-v1.5',
-        'browser_model': 'Xenova/bge-small-en-v1.5',
-        'display_name':  'BGE-Small-EN v1.5',
-    },
     'bge_base': {
         'python_model':  'BAAI/bge-base-en-v1.5',
         'browser_model': 'Xenova/bge-base-en-v1.5',
