@@ -29,9 +29,12 @@ const modelHint     = document.getElementById('model-hint');
 const methodBtns    = document.querySelectorAll('.method-btn');
 const pParamsEl     = document.getElementById('params-pairwise');
 const hParamsEl     = document.getElementById('params-hdbscan');
+const eParamsEl     = document.getElementById('params-elsst');
 const conceptsInput = document.getElementById('concepts-input');
+const conceptsSect  = document.getElementById('concepts-section');
 const conceptCount  = document.getElementById('concept-count');
 const processBtn    = document.getElementById('process-btn');
+const elsstBtn      = document.getElementById('elsst-btn');
 const progressWrap  = document.getElementById('progress-wrap');
 const progressFill  = document.getElementById('progress-fill');
 const statusEl      = document.getElementById('status');
@@ -40,6 +43,11 @@ const exportBtn     = document.getElementById('export-btn');
 const tabBtns       = document.querySelectorAll('.tab-btn[data-target]');
 const tabContents   = document.querySelectorAll('.tab-content');
 const matrixWarn    = document.getElementById('matrix-warn');
+const elsstQuery    = document.getElementById('elsst-query');
+const elsstCacheSt  = document.getElementById('elsst-cache-status');
+const elsstResults  = document.getElementById('elsst-results');
+const elsstModelSel = document.getElementById('elsst-model-select');
+const l2Toggle      = document.getElementById('l2-toggle');
 
 // ─── Slider sync helper ───────────────────────────────────────────────────────
 function syncSlider(inputId, valueId, transform = v => v) {
@@ -55,6 +63,7 @@ syncSlider('umap-md',         'v-umap-md',   v => (+v).toFixed(2));
 syncSlider('eps-input',       'v-eps',       v => (+v).toFixed(2));
 syncSlider('mcs-input',       'v-mcs',       v => v);
 syncSlider('ms-input',        'v-ms',        v => v);
+syncSlider('topk-input',      'v-topk',      v => v);
 
 document.getElementById('umap-nc').addEventListener('change', e => {
     document.getElementById('v-umap-nc').textContent = (+e.target.value === 0) ? 'None' : e.target.value;
@@ -81,6 +90,15 @@ methodBtns.forEach(btn => {
         currentMethod = btn.dataset.method;
         pParamsEl.style.display = currentMethod === 'pairwise' ? '' : 'none';
         hParamsEl.style.display = currentMethod === 'hdbscan'  ? '' : 'none';
+        eParamsEl.style.display = currentMethod === 'elsst'    ? '' : 'none';
+        // Show/hide concepts textarea vs ELSST query input
+        conceptsSect.style.display = currentMethod === 'elsst' ? 'none' : '';
+        processBtn.style.display   = currentMethod === 'elsst' ? 'none' : '';
+        elsstBtn.style.display     = currentMethod === 'elsst' ? ''     : 'none';
+        // Auto-select model for ELSST mode
+        if (currentMethod === 'elsst') {
+            loadElsstCache();  // preload cache for selected model
+        }
     });
 });
 
@@ -756,5 +774,207 @@ async function processConcepts() {
     }
 }
 
+// ─── ELSST Hierarchy Lookup ────────────────────────────────────────────────────
+// Pre-computed caches per model:
+//   elsst_paths.json                      (shared metadata, original-case)
+//   elsst_embeddings_<key>.bin            (raw Float32)
+//   elsst_embeddings_<key>_l2.bin         (L2-normalized Float32)
+//
+// ELSST model registry — maps model keys to their Xenova browser models
+const ELSST_MODELS = {
+    'allmpnet': { browser: 'Xenova/all-mpnet-base-v2', display: 'All-MPNet-Base-v2' }
+};
+
+// Cache store: { '<key>_raw': ..., '<key>_l2': ..., paths: [...] }
+const elsstCacheStore = { paths: null };
+let elsstPathsLoaded = false;
+
+async function loadElsstCache() {
+    const modelKey = elsstModelSel.value;
+    const useL2    = l2Toggle.checked;
+    const suffix   = useL2 ? '_l2' : '';
+    const cacheKey = `${modelKey}${suffix}`;
+
+    // Already loaded?
+    if (elsstCacheStore[cacheKey] && elsstPathsLoaded) {
+        const c = elsstCacheStore[cacheKey];
+        elsstCacheSt.textContent = `Cache ready: ${c.n} paths · ${ELSST_MODELS[modelKey].display} · ${useL2 ? 'L2' : 'raw'}`;
+        return;
+    }
+
+    elsstCacheSt.textContent = 'Loading ELSST cache…';
+    try {
+        // Load shared paths JSON once
+        if (!elsstPathsLoaded) {
+            const jsonResp = await fetch('elsst_paths.json');
+            if (!jsonResp.ok) throw new Error('elsst_paths.json not found. Run build_elsst_cache.py first.');
+            elsstCacheStore.paths = await jsonResp.json();
+            elsstPathsLoaded = true;
+        }
+
+        // Load model-specific embeddings
+        const binFile = `elsst_embeddings_${modelKey}${suffix}.bin`;
+        const binResp = await fetch(binFile);
+        if (!binResp.ok) throw new Error(`${binFile} not found. Run build_elsst_cache.py first.`);
+
+        const buf    = await binResp.arrayBuffer();
+        const header = new Uint32Array(buf, 0, 2);
+        const n   = header[0];
+        const dim = header[1];
+        const raw = new Float32Array(buf, 8);
+
+        const embeddings = [];
+        for (let i = 0; i < n; i++) {
+            embeddings.push(raw.subarray(i * dim, (i + 1) * dim));
+        }
+
+        elsstCacheStore[cacheKey] = { embeddings, dim, n };
+        elsstCacheSt.textContent = `Cache ready: ${n} paths · ${ELSST_MODELS[modelKey].display} · ${useL2 ? 'L2' : 'raw'}`;
+    } catch (err) {
+        elsstCacheSt.textContent = `Error: ${err.message}`;
+        console.error('ELSST cache load error:', err);
+    }
+}
+
+// Reload cache when model or L2 toggle changes
+elsstModelSel.addEventListener('change', () => loadElsstCache());
+l2Toggle.addEventListener('change', () => loadElsstCache());
+
+function elsstDotProduct(a, b) {
+    let d = 0;
+    for (let i = 0; i < a.length; i++) d += a[i] * b[i];
+    return d;
+}
+
+function elsstCosineSim(a, b) {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot   += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-10);
+}
+
+async function searchELSST() {
+    const rawQuery = elsstQuery.value.trim();
+    if (!rawQuery) { alert('Please enter a query term.'); return; }
+    const query  = rawQuery.toLowerCase();  // always lowercase for matching
+    const topK   = parseInt(document.getElementById('topk-input').value, 10);
+    const useL2  = l2Toggle.checked;
+    const modelKey = elsstModelSel.value;
+    const suffix = useL2 ? '_l2' : '';
+    const cacheKey = `${modelKey}${suffix}`;
+
+    try {
+        elsstBtn.disabled = true;
+        showProgress('Loading ELSST cache…');
+        await loadElsstCache();
+        const cache = elsstCacheStore[cacheKey];
+        if (!cache) throw new Error('ELSST cache not available.');
+        const paths = elsstCacheStore.paths;
+
+        // Embed query using the same browser model as the cache expects
+        const browserModel = ELSST_MODELS[modelKey].browser;
+        setProgress(20, `Loading ${ELSST_MODELS[modelKey].display}…`);
+        const extractor = await pipeline('feature-extraction', browserModel);
+
+        setProgress(40, `Embedding query: "${query}"…`);
+        const out = await extractor(query, { pooling: 'mean', normalize: false });
+        let queryEmb = Array.from(out.data);
+
+        // Apply L2 normalization to query if toggle is on
+        if (useL2) {
+            queryEmb = l2Normalize(queryEmb);
+        }
+
+        // Compute similarity against all cached path embeddings
+        setProgress(60, `Comparing against ${cache.n} paths…`);
+        const simFn = useL2 ? elsstDotProduct : elsstCosineSim;
+        const scores = [];
+        for (let i = 0; i < cache.n; i++) {
+            scores.push({
+                idx: i,
+                similarity: simFn(queryEmb, cache.embeddings[i])
+            });
+        }
+
+        // Sort descending
+        scores.sort((a, b) => b.similarity - a.similarity);
+
+        // ── Deduplicate by leaf: keep only the best-scoring path per leaf ──
+        const seenLeaves = new Set();
+        const deduped = [];
+        for (const s of scores) {
+            const leaf = paths[s.idx].leaf;
+            if (!seenLeaves.has(leaf)) {
+                seenLeaves.add(leaf);
+                deduped.push(s);
+            }
+            if (deduped.length >= topK) break;
+        }
+
+        setProgress(85, 'Rendering results…');
+        renderElsstResults(rawQuery, deduped, topK, modelKey, useL2, paths, cache.n);
+
+        // Switch to ELSST tab
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        const elsstTabBtn = document.querySelector('.tab-btn[data-target="tab-elsst"]');
+        if (elsstTabBtn) elsstTabBtn.classList.add('active');
+        document.getElementById('tab-elsst').classList.add('active');
+
+        hideProgress(`Done · Top ${deduped.length} matches for "${rawQuery}"`);
+    } catch (err) {
+        console.error(err);
+        hideProgress(`Error: ${err.message}`);
+    } finally {
+        elsstBtn.disabled = false;
+    }
+}
+
+function renderElsstResults(query, topResults, topK, modelKey, useL2, paths, nPaths) {
+    const modelName = ELSST_MODELS[modelKey].display;
+    const normLabel = useL2 ? 'L2-normalized (cosine)' : 'raw (dot product)';
+
+    let html = `<div class="report-section">
+        <h3>ELSST Hierarchy Lookup &nbsp;<small>Query: "${query}" · Top ${topK}</small></h3>
+        <div class="param-pill">Model: ${modelName} · ${nPaths} root→leaf paths · ${normLabel} · duplicates collapsed</div>
+        <div class="elsst-results-list">`;
+
+    topResults.forEach((r, rank) => {
+        const entry = paths[r.idx];
+        const pathParts = entry.path.split(' > ');
+        const leaf = pathParts[pathParts.length - 1];
+        const parents = pathParts.slice(0, -1);
+        const simPct = Math.round(Math.max(0, r.similarity) * 100);
+
+        html += `<div class="elsst-result-card">
+            <div class="elsst-rank">#${rank + 1}</div>
+            <div class="elsst-result-body">
+                <div class="elsst-leaf-name">${leaf}</div>
+                <div class="elsst-path-breadcrumb">
+                    ${parents.map(p => `<span class="elsst-bc-parent">${p}</span>`).join('<span class="elsst-bc-sep">›</span>')}
+                    ${parents.length ? '<span class="elsst-bc-sep">›</span>' : ''}
+                    <span class="elsst-bc-leaf">${leaf}</span>
+                </div>
+                <div class="sim-bar-wrap">
+                    <div class="sim-bar" style="width:${simPct}%"></div>
+                    <span class="similarity-score">${r.similarity.toFixed(4)}</span>
+                </div>
+            </div>
+        </div>`;
+    });
+
+    html += '</div></div>';
+    elsstResults.innerHTML = html;
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 processBtn.addEventListener('click', processConcepts);
+elsstBtn.addEventListener('click', searchELSST);
+
+// Allow Enter key in ELSST query input
+elsstQuery.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); searchELSST(); }
+});

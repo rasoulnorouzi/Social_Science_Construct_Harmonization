@@ -112,6 +112,7 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 }
 
 /* ─── Method toggle ─────────────────────────────────────────────────────────── */
+/* ─── Method toggle ─────────────────────────────────────────────────────────── */
 .method-toggle {
     display: flex;
     border: 1px solid var(--border);
@@ -133,6 +134,25 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Sego
 .method-btn.active {
     background: var(--primary);
     color: white;
+}
+
+/* ─── Toggle row (L2 normalization etc.) ────────────────────────────────────── */
+.toggle-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.toggle-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.toggle-check {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+    cursor: pointer;
 }
 
 /* ─── Full select ──────────────────────────────────────────────────────────── */
@@ -414,3 +434,85 @@ code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 0.8
     color: var(--muted);
     font-size: 0.9rem;
     line-height: 1.6;
+}
+
+/* ─── ELSST Lookup ──────────────────────────────────────────────────────────── */
+.elsst-query-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+    font-family: 'Menlo', 'Consolas', monospace;
+    background: white;
+    margin-top: 4px;
+    text-transform: uppercase;
+}
+.elsst-query-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+.elsst-results-list { display: flex; flex-direction: column; gap: 10px; }
+
+.elsst-result-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    transition: border-color .15s;
+}
+.elsst-result-card:hover { border-color: var(--primary); }
+
+.elsst-rank {
+    background: var(--primary);
+    color: white;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    white-space: nowrap;
+    min-width: 36px;
+    text-align: center;
+}
+
+.elsst-result-body { flex: 1; min-width: 0; }
+
+.elsst-leaf-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.elsst-path-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+}
+
+.elsst-bc-parent {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+}
+
+.elsst-bc-sep {
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.9em;
+}
+
+.elsst-bc-leaf {
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-weight: 700;
+    white-space: nowrap;
+}

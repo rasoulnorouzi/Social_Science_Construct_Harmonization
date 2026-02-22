@@ -35,6 +35,7 @@
             <div class="method-toggle" id="method-toggle">
                 <button class="method-btn active" data-method="pairwise">Pairwise</button>
                 <button class="method-btn" data-method="hdbscan">HDBSCAN</button>
+                <button class="method-btn" data-method="elsst">ELSST Lookup</button>
             </div>
         </div>
 
@@ -107,8 +108,39 @@
             <div class="hint">Minimum neighbours for a core point. Higher = more conservative, more noise.</div>
         </div>
 
+        <!-- ── ELSST LOOKUP PARAMS ─────────────────── -->
+        <div id="params-elsst" class="param-section param-panel" style="display:none">
+            <div class="param-section-title">ELSST Hierarchy Lookup</div>
+            <div class="hint mb4">Search the ELSST thesaurus hierarchy. Each concept is embedded as a full root→leaf path (e.g. <code>buildings&nbsp;&gt;&nbsp;residential buildings&nbsp;&gt;&nbsp;domestic safety</code>). Returns the most similar <strong>leaf</strong> concepts. Duplicate leaves are collapsed to the best-scoring path.</div>
+
+            <label class="param-label mt8">ELSST Model</label>
+            <select id="elsst-model-select" class="full-select">
+                <option value="allmpnet" selected>All-MPNet-Base-v2</option>
+            </select>
+            <div class="hint">Determines which pre-computed embedding cache to load.</div>
+
+            <label class="param-label mt8">
+                Top-K Results
+                <span class="param-value" id="v-topk">3</span>
+            </label>
+            <input type="range" id="topk-input" class="slider" min="1" max="10" step="1" value="3">
+            <div class="hint">Number of similar leaf concepts to return.</div>
+
+            <div class="toggle-row mt8">
+                <label class="toggle-label" for="l2-toggle">L2 Normalize</label>
+                <input type="checkbox" id="l2-toggle" class="toggle-check" checked>
+                <div class="hint" style="margin-top:2px">When enabled, uses L2-normalized embeddings (cosine similarity). When disabled, uses raw embeddings (dot product).</div>
+            </div>
+
+            <label class="param-label mt8">Query Term</label>
+            <input type="text" id="elsst-query" class="elsst-query-input" placeholder="e.g. safety in the home" spellcheck="false">
+            <div class="hint">Enter a concept term (case-insensitive). It will be lowercased and compared against all root→leaf ELSST paths.</div>
+
+            <div id="elsst-cache-status" class="hint mt8" style="color:var(--primary);font-weight:600;"></div>
+        </div>
+
         <!-- Concepts input -->
-        <div class="param-section">
+        <div id="concepts-section" class="param-section">
             <div class="param-section-title">
                 Concepts
                 <span class="badge" id="concept-count">0</span>
@@ -129,6 +161,7 @@ insomnia</textarea>
         </div>
 
         <button id="process-btn" class="run-btn">&#9654;&nbsp; Run Analysis</button>
+        <button id="elsst-btn" class="run-btn" style="display:none">&#128269;&nbsp; Search ELSST</button>
 
         <!-- Progress -->
         <div id="progress-wrap" style="display:none" class="progress-wrap">
@@ -146,6 +179,7 @@ insomnia</textarea>
             <button class="tab-btn active" data-target="tab-vis">&#128202; Visualization</button>
             <button class="tab-btn" data-target="tab-report">&#128203; Clusters &amp; Pairs</button>
             <button class="tab-btn" data-target="tab-matrix">&#127863; Similarity Matrix</button>
+            <button class="tab-btn" data-target="tab-elsst">&#128218; ELSST Results</button>
             <div class="tabs-right">
                 <button id="export-btn" class="export-btn" style="display:none">&#8659; Export JSON</button>
             </div>
@@ -165,6 +199,10 @@ insomnia</textarea>
         <div id="tab-matrix" class="tab-content">
             <div id="matrix-container" class="plot-container"></div>
             <div id="matrix-warn" class="matrix-warn" style="display:none"></div>
+        </div>
+
+        <div id="tab-elsst" class="tab-content">
+            <div class="report-scroll" id="elsst-results"></div>
         </div>
     </main>
 </div>
