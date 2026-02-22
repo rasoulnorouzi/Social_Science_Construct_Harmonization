@@ -59,6 +59,13 @@ rerankToggle.addEventListener('change', () => {
 });
 syncSlider('pool-input', 'v-pool', v => v);
 
+// Auto-resize ELSST query textarea as user types
+function autoResizeQuery() {
+    elsstQuery.style.height = 'auto';
+    elsstQuery.style.height = Math.max(72, elsstQuery.scrollHeight) + 'px';
+}
+elsstQuery.addEventListener('input', autoResizeQuery);
+
 // ─── Slider sync helper ───────────────────────────────────────────────────────
 function syncSlider(inputId, valueId, transform = v => v) {
     const input = document.getElementById(inputId);
@@ -1145,7 +1152,7 @@ function renderElsstResults(query, cleanedQuery, topResults, topK, poolSize, mod
 processBtn.addEventListener('click', processConcepts);
 elsstBtn.addEventListener('click', searchELSST);
 
-// Allow Enter key in ELSST query input
+// Enter submits; Shift+Enter inserts newline in the textarea
 elsstQuery.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); searchELSST(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); searchELSST(); }
 });

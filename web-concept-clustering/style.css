@@ -439,16 +439,33 @@ code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 0.8
 /* ─── ELSST Lookup ──────────────────────────────────────────────────────────── */
 .elsst-query-input {
     width: 100%;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
     border-radius: var(--radius);
-    font-size: 0.88rem;
-    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 0.93rem;
+    font-family: inherit;
+    line-height: 1.5;
     background: white;
     margin-top: 4px;
     text-transform: uppercase;
+    resize: vertical;
+    min-height: 72px;
+    letter-spacing: 0.01em;
+    transition: border-color 0.15s;
+    display: block;
 }
 .elsst-query-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    background: #f4f4f4;
+    line-height: 1.4;
+}
 
 .elsst-results-list { display: flex; flex-direction: column; gap: 10px; }
 
