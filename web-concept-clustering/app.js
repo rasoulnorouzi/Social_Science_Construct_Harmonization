@@ -54,10 +54,30 @@ const rerankToggle  = document.getElementById('rerank-toggle');
 const rerankPoolRow = document.getElementById('rerank-pool-row');
 
 // Show / hide Stage-1 pool slider when re-ranking toggle changes
+// Initialise to match the default checked state in HTML
+rerankPoolRow.style.display = rerankToggle.checked ? '' : 'none';
 rerankToggle.addEventListener('change', () => {
     rerankPoolRow.style.display = rerankToggle.checked ? '' : 'none';
 });
 syncSlider('pool-input', 'v-pool', v => v);
+
+document.getElementById('topk-input').addEventListener('input', (e) => {
+    const topK = parseInt(e.target.value, 10);
+    const poolInput = document.getElementById('pool-input');
+    if (parseInt(poolInput.value, 10) < topK) {
+        poolInput.value = topK;
+        document.getElementById('v-pool').textContent = topK;
+    }
+});
+
+document.getElementById('pool-input').addEventListener('input', (e) => {
+    const pool = parseInt(e.target.value, 10);
+    const topkInput = document.getElementById('topk-input');
+    if (parseInt(topkInput.value, 10) > pool) {
+        topkInput.value = pool;
+        document.getElementById('v-topk').textContent = pool;
+    }
+});
 
 // Auto-resize ELSST query textarea as user types
 function autoResizeQuery() {
@@ -797,42 +817,101 @@ async function processConcepts() {
 //   elsst_embeddings_<key>.bin            (raw Float32)
 //   elsst_embeddings_<key>_l2.bin         (L2-normalized Float32)
 //
-// ELSST model registry — maps model keys to their Xenova browser models
+// ELSST model registry — maps model keys to their Xenova browser models.
+// dynamic: false → loads a pre-built .bin file
+// dynamic: true  → computes embeddings in the browser, caches in IndexedDB
 const ELSST_MODELS = {
-    'allmpnet':  { browser: 'Xenova/all-mpnet-base-v2',   display: 'All-MPNet-Base-v2 (768d)' },
-    'bge_base':  { browser: 'Xenova/bge-base-en-v1.5',    display: 'BGE-Base-EN v1.5 (768d)' },
+    'allmpnet': { browser: 'Xenova/all-mpnet-base-v2', display: 'All-MPNet-Base-v2 (768d)', dynamic: false },
+    'bge_base': { browser: 'Xenova/bge-base-en-v1.5',  display: 'BGE-Base-EN v1.5 (768d)', dynamic: false },
 };
 
 const ELSST_STRATEGIES = {
-    'leaf':    { display: 'Leaf Only',      hint: 'Embeds only the leaf concept name — strongest direct semantic match.' },
-    'path':    { display: 'Full Path',      hint: 'Embeds the full root→leaf path (e.g. "A > B > C") — hierarchical context.' },
-    'anchor':  { display: 'Leaf-Anchored',  hint: 'Leaf prepended to the full path ("C: A > B > C") — emphasises leaf + context.' },
-    'context': { display: 'Contextual',     hint: 'Natural-language framing ("C is related to B, A") — best for free-text queries.' },
+    'leaf':     { display: 'Leaf Only',     hint: 'Embeds only the leaf concept name — direct semantic match.' },
+    'anchor':   { display: 'Leaf-Anchored', hint: 'Leaf prepended to the full path ("C: A > B > C") — emphasises leaf + hierarchy.' },
+    'context':  { display: 'Contextual',    hint: 'Natural-language framing ("C is related to B, A") — good for free-text queries.' },
+    'bracket':  { display: 'Bracketed',     hint: 'Leaf with parents in brackets ("C (B, A)") — disambiguation-focused.' },
+    'enriched': { display: 'Enriched ★',    hint: 'Leaf + alternative labels + scope note + path — best semantic coverage for free-text queries.' },
 };
+
+// ─── Strategy text builder (mirrors Python build_elsst_cache.strategy_text) ──
+// Produces the same text that was embedded when building a pre-computed .bin.
+function getStrategyText(entry, stratKey) {
+    const leaf      = entry.leaf.toLowerCase();
+    const pathLower = entry.path.toLowerCase();
+    const parts     = pathLower.split('>').map(p => p.trim());
+    const parents   = parts.slice(0, -1);   // everything except the leaf
+    const alts      = (entry.alt_labels || []).map(a => a.toLowerCase());
+    const scope     = (entry.scope_note || '').trim().toLowerCase();
+    switch (stratKey) {
+        case 'leaf':     return leaf;
+        case 'anchor':   return `${leaf}: ${pathLower}`;
+        case 'context':  return parents.length
+            ? `${leaf} is related to ${[...parents].reverse().join(', ')}`
+            : leaf;
+        case 'bracket':  return parents.length
+            ? `${leaf} (${[...parents].reverse().join(', ')})`
+            : leaf;
+        case 'enriched': {
+            const outParts = [leaf];
+            if (alts.length)  outParts.push(alts.join('; '));
+            if (scope)        outParts.push(scope);
+            outParts.push(pathLower);
+            return outParts.join('. ');
+        }
+        default:         return pathLower;
+    }
+}
+
+// ─── IndexedDB helpers for dynamic model caching ──────────────────────────────
+function _openElsstDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open('ElsstEmbeddingsDB', 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore('caches', { keyPath: 'key' });
+        req.onsuccess  = e  => resolve(e.target.result);
+        req.onerror    = () => reject(req.error);
+    });
+}
+async function _idbGet(key) {
+    const db = await _openElsstDB();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction('caches', 'readonly').objectStore('caches').get(key);
+        req.onsuccess = () => resolve(req.result?.data ?? null);
+        req.onerror   = () => reject(req.error);
+    });
+}
+async function _idbSet(key, data) {
+    const db = await _openElsstDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('caches', 'readwrite');
+        tx.objectStore('caches').put({ key, data });
+        tx.oncomplete = resolve;
+        tx.onerror    = () => reject(tx.error);
+    });
+}
 
 // Cache store: { '<key>_raw': ..., '<key>_l2': ..., paths: [...] }
 const elsstCacheStore = { paths: null };
 let elsstPathsLoaded = false;
 
 async function loadElsstCache() {
-    const modelKey = elsstModelSel.value;
-    const stratKey = elsstStratSel.value;
-    const suffix   = '_l2';
-    const cacheKey = `${modelKey}_${stratKey}${suffix}`;
+    const modelKey  = elsstModelSel.value;
+    const stratKey  = elsstStratSel.value;
+    const modelInfo = ELSST_MODELS[modelKey];
+    const cacheKey  = `${modelKey}_${stratKey}_l2`;
 
     // Update strategy hint
     if (strategyHint && ELSST_STRATEGIES[stratKey]) {
         strategyHint.textContent = ELSST_STRATEGIES[stratKey].hint;
     }
 
-    // Already loaded?
+    // Already in memory?
     if (elsstCacheStore[cacheKey] && elsstPathsLoaded) {
         const c = elsstCacheStore[cacheKey];
-        elsstCacheSt.textContent = `Cache ready: ${c.n} paths · ${ELSST_MODELS[modelKey].display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
+        elsstCacheSt.textContent = `Cache ready: ${c.n} paths · ${modelInfo.display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
         return;
     }
 
-    elsstCacheSt.textContent = 'Loading ELSST cache…';
+    elsstCacheSt.textContent = 'Loading ELSST paths…';
     try {
         // Load shared paths JSON once
         if (!elsstPathsLoaded) {
@@ -841,25 +920,70 @@ async function loadElsstCache() {
             elsstCacheStore.paths = await jsonResp.json();
             elsstPathsLoaded = true;
         }
+        const paths = elsstCacheStore.paths;
 
-        // Load model+strategy specific embeddings
-        const binFile = `elsst_embeddings_${modelKey}_${stratKey}${suffix}.bin`;
-        const binResp = await fetch(binFile);
-        if (!binResp.ok) throw new Error(`${binFile} not found. Run build_elsst_cache.py first.`);
+        if (!modelInfo.dynamic) {
+            // ── Static pre-built .bin file ────────────────────────────────────
+            const binFile = `elsst_embeddings_${modelKey}_${stratKey}_l2.bin`;
+            elsstCacheSt.textContent = `Loading ${binFile}…`;
+            const binResp = await fetch(binFile);
+            if (!binResp.ok) throw new Error(`${binFile} not found. Run build_elsst_cache.py first.`);
 
-        const buf    = await binResp.arrayBuffer();
-        const header = new Uint32Array(buf, 0, 2);
-        const n   = header[0];
-        const dim = header[1];
-        const raw = new Float32Array(buf, 8);
+            const buf  = await binResp.arrayBuffer();
+            const hdr  = new Uint32Array(buf, 0, 2);
+            const n    = hdr[0];
+            const dim  = hdr[1];
+            const raw  = new Float32Array(buf, 8);
+            const embeddings = [];
+            for (let i = 0; i < n; i++) embeddings.push(raw.subarray(i * dim, (i + 1) * dim));
 
-        const embeddings = [];
-        for (let i = 0; i < n; i++) {
-            embeddings.push(raw.subarray(i * dim, (i + 1) * dim));
+            elsstCacheStore[cacheKey] = { embeddings, dim, n };
+            elsstCacheSt.textContent = `Cache ready: ${n} paths · ${modelInfo.display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
+
+        } else {
+            // ── Dynamic: check IndexedDB first, else compute in browser ──────
+            const idbKey = `elsst_${cacheKey}`;
+            elsstCacheSt.textContent = `Checking local IndexedDB for ${modelInfo.display}…`;
+
+            const stored = await _idbGet(idbKey);
+            if (stored) {
+                const { n, dim, buffer } = stored;
+                const embeddings = [];
+                for (let i = 0; i < n; i++) embeddings.push(buffer.subarray(i * dim, (i + 1) * dim));
+                elsstCacheStore[cacheKey] = { embeddings, dim, n };
+                elsstCacheSt.textContent = `Cache ready (cached locally): ${n} paths · ${modelInfo.display} · ${ELSST_STRATEGIES[stratKey].display}`;
+                return;
+            }
+
+            // Nothing cached — compute now (first use only)
+            elsstCacheSt.textContent = `Loading ${modelInfo.display} — first use builds an embedding cache (~${paths.length} paths). This may take several minutes…`;
+            const extractor = await pipeline('feature-extraction', modelInfo.browser);
+
+            const n = paths.length;
+            let dim = null;
+            const flat = [];   // collect as regular arrays then pack into Float32Array
+
+            for (let i = 0; i < n; i++) {
+                if (i % 50 === 0) {
+                    elsstCacheSt.textContent = `Building cache: ${i}/${n} paths · ${modelInfo.display} (${ELSST_STRATEGIES[stratKey].display})…`;
+                }
+                const text = getStrategyText(paths[i], stratKey);
+                const out  = await extractor(text, { pooling: 'mean', normalize: false });
+                const emb  = l2Normalize(Array.from(out.data));
+                if (dim === null) dim = emb.length;
+                for (const v of emb) flat.push(v);
+            }
+
+            // Store as flat Float32Array in IndexedDB
+            const buffer = new Float32Array(flat);
+            await _idbSet(idbKey, { n, dim, buffer });
+
+            // Also keep in memory as subarray refs
+            const embeddings = [];
+            for (let i = 0; i < n; i++) embeddings.push(buffer.subarray(i * dim, (i + 1) * dim));
+            elsstCacheStore[cacheKey] = { embeddings, dim, n };
+            elsstCacheSt.textContent = `Cache ready (built & saved): ${n} paths · ${modelInfo.display} · ${ELSST_STRATEGIES[stratKey].display}`;
         }
-
-        elsstCacheStore[cacheKey] = { embeddings, dim, n };
-        elsstCacheSt.textContent = `Cache ready: ${n} paths · ${ELSST_MODELS[modelKey].display} · ${ELSST_STRATEGIES[stratKey].display} · L2-normalized`;
     } catch (err) {
         elsstCacheSt.textContent = `Error: ${err.message}`;
         console.error('ELSST cache load error:', err);
@@ -959,9 +1083,11 @@ function elsstCosineSim(a, b) {
 async function searchELSST() {
     const rawQuery = elsstQuery.value.trim();
     if (!rawQuery) { alert('Please enter a query term.'); return; }
-    const query  = preprocessQuery(rawQuery);     // cleaned for bi-encoder
     const queryRaw = rawQuery.toLowerCase();       // original for cross-encoder
-    console.log(`[ELSST] raw: "${queryRaw}"  →  cleaned: "${query}"`);
+    const query  = preprocessQuery(rawQuery);     // stopword-cleaned for bi-encoder (leaf/anchor/context/bracket)
+    // For 'enriched' strategy the corpus has long rich text; use raw query for better asymmetric retrieval.
+    const biencQuery = elsstStratSel.value === 'enriched' ? queryRaw : query;
+    console.log(`[ELSST] raw: "${queryRaw}"  cleaned: "${query}"  bienc: "${biencQuery}"`);
     const topK   = parseInt(document.getElementById('topk-input').value, 10);
     const modelKey = elsstModelSel.value;
     const stratKey = elsstStratSel.value;
@@ -981,30 +1107,28 @@ async function searchELSST() {
         setProgress(20, `Loading ${ELSST_MODELS[modelKey].display}…`);
         const extractor = await pipeline('feature-extraction', browserModel);
 
-        setProgress(40, `Embedding query: "${query}"…`);
-        const out = await extractor(query, { pooling: 'mean', normalize: false });
+        setProgress(40, `Embedding query: "${biencQuery}"…`);
+        const out = await extractor(biencQuery, { pooling: 'mean', normalize: false });
         let queryEmb = l2Normalize(Array.from(out.data));
+
+        const useRerank = rerankToggle.checked;
+        // Enforce pool >= topK at search time (sliders also enforce this)
+        const poolRaw = parseInt(document.getElementById('pool-input').value, 10);
+        const poolSize = useRerank ? Math.max(poolRaw, topK) : topK;
 
         // Compute similarity against all cached path embeddings
         // Both query and cache are L2-normalized → dot product = cosine similarity
         setProgress(60, `Stage 1: comparing against ${cache.n} paths…`);
-        const simFn = elsstDotProduct;
         const scores = [];
         for (let i = 0; i < cache.n; i++) {
             scores.push({
                 idx: i,
-                similarity: simFn(queryEmb, cache.embeddings[i])
+                similarity: elsstDotProduct(queryEmb, cache.embeddings[i])
             });
         }
 
         // Sort descending
         scores.sort((a, b) => b.similarity - a.similarity);
-
-        const useRerank = rerankToggle.checked;
-        // Stage-1 pool: how many candidates the bi-encoder retrieves for the CE
-        const poolSize  = useRerank
-            ? Math.max(parseInt(document.getElementById('pool-input').value, 10), topK)
-            : topK;
 
         // ── Stage 1: Deduplicate by leaf, collect poolSize best bi-encoder hits ──
         const seenLeaves = new Set();
@@ -1029,13 +1153,18 @@ async function searchELSST() {
             const rrModel     = window._rerankModel;
 
             setProgress(82, `Stage 2: re-ranking ${deduped.length} candidates…`);
-            // Score each (query, passage) pair individually.
-            // Cross-encoder receives the ORIGINAL user query (full semantics +
-            // polarity) paired against the same strategy text used for caching.
+            // Cross-encoder passage: use enriched text (leaf + altLabels + scopeNote + path)
+            // so the model has maximum context to judge relevance, regardless of bi-encoder strategy.
             for (let pi = 0; pi < deduped.length; pi++) {
                 const entry   = paths[deduped[pi].idx];
-                // Use the same path text the cache was built from
-                const passage = entry.path.toLowerCase();
+                // Build enriched passage text for cross-encoder
+                const passageParts = [entry.leaf.toLowerCase()];
+                const alts = (entry.alt_labels || []).filter(Boolean);
+                if (alts.length) passageParts.push(alts.join('; ').toLowerCase());
+                const sn = (entry.scope_note || '').trim();
+                if (sn) passageParts.push(sn.toLowerCase());
+                passageParts.push(entry.path.toLowerCase());
+                const passage = passageParts.join('. ');
                 const inputs  = rrTokenizer(queryRaw, {
                     text_pair:  passage,
                     padding:    true,
@@ -1058,7 +1187,7 @@ async function searchELSST() {
         deduped = deduped.slice(0, topK);
 
         setProgress(90, 'Rendering results…');
-        renderElsstResults(rawQuery, query, deduped, topK, poolSize, modelKey, stratKey, useRerank, paths, cache.n);
+        renderElsstResults(rawQuery, biencQuery, deduped, topK, poolSize, modelKey, stratKey, useRerank, paths, cache.n);
 
         // Switch to ELSST tab
         tabBtns.forEach(b => b.classList.remove('active'));

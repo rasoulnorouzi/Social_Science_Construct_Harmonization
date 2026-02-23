@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -116,16 +116,17 @@
             <label class="param-label mt8">ELSST Model</label>
             <select id="elsst-model-select" class="full-select">
                 <option value="allmpnet" selected>All-MPNet-Base-v2 (768d)</option>
-                <option value="bge_base">BGE-Base-EN v1.5 (768d) — highest quality</option>
+                <option value="bge_base">BGE-Base-EN v1.5 (768d)</option>
             </select>
             <div class="hint">Embedding model for both pre-computed paths and browser query.</div>
 
             <label class="param-label mt8">Path Strategy</label>
             <select id="elsst-strategy-select" class="full-select">
-                <option value="leaf">Leaf Only &mdash; direct semantic match</option>
-                <option value="path">Full Path &mdash; hierarchical context</option>
-                <option value="anchor" selected>Leaf-Anchored &mdash; leaf emphasis + context</option>
+                <option value="enriched" selected>Enriched &#9733; &mdash; leaf + synonyms + definition + path</option>
+                <option value="anchor">Leaf-Anchored &mdash; leaf emphasis + hierarchy</option>
                 <option value="context">Contextual &mdash; natural-language framing</option>
+                <option value="bracket">Bracketed &mdash; leaf (parent, grandparent)</option>
+                <option value="leaf">Leaf Only &mdash; direct semantic match</option>
             </select>
             <div id="strategy-hint" class="hint">How each concept’s path is converted to text before embedding.</div>
 
@@ -138,7 +139,7 @@
 
             <div class="toggle-row mt8">
                 <label class="toggle-label" for="rerank-toggle">Cross-Encoder Re-ranking</label>
-                <input type="checkbox" checked="checked" id="rerank-toggle" class="toggle-check">
+                <input type="checkbox" id="rerank-toggle" class="toggle-check">
                 <div class="hint" style="margin-top:2px">
                     <strong>Stage&nbsp;1</strong>: bi-encoder retrieves the top-N candidates.
                     <strong>Stage&nbsp;2</strong>: <code>ms-marco-MiniLM-L-6-v2</code> deeply scores each (query, concept) pair and re-orders the list.
