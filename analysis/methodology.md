@@ -259,6 +259,12 @@ $$\Delta\text{Recall} = \text{Recall}_{\text{Common}} - \text{Recall}_{\text{Rar
 
 A large positive $\Delta\text{Recall}$ indicates the model has a systematic disadvantage for rare/technical terms — it recovers common synonyms but misses rare ones. Ideally, $\Delta\text{Recall} \approx 0$ (frequency-invariant performance).
 
+**Retention Rate:**
+
+$$\text{Retention Rate} = \frac{\text{Recall}_{\text{Rare}}}{\text{Recall}_{\text{Common}}}$$
+
+A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of the model's common-word recall survives on rare words?" independently of the model's absolute performance level. Values close to **1.0** indicate low bias; values close to **0** indicate strong rare-word penalty. $\text{NaN}$ when $\text{Recall}_{\text{Common}} = 0$.
+
 ### Audit 4 — Semantic Decay (Semantic Gap Test)
 
 **Objective:** Test whether models can recognise synonymy when there is no lexical overlap between the two terms — i.e., when purely semantic (not surface) understanding is required.
@@ -270,11 +276,17 @@ Using the same character 3-gram Jaccard measure as Audit 2, but applied to posit
 - **Easy positives:** $J(t_i, t_j) > 0.5$ — terms share substantial orthographic overlap (e.g., "psychology" / "psychological"). The model can exploit surface cues.
 - **Hard positives:** $J(t_i, t_j) = 0.0$ — zero character overlap (e.g., "happiness" / "wellbeing"). The model must rely entirely on semantic representation.
 
-**Semantic Decay Slope:**
+**Semantic Decay ΔRecall:**
 
-$$\text{Slope} = \text{Recall}_{\text{Hard}} - \text{Recall}_{\text{Easy}}$$
+$$\Delta\text{Recall} = \text{Recall}_{\text{Hard}} - \text{Recall}_{\text{Easy}}$$
 
-A negative slope is expected and normal — models find it harder to match semantically related but lexically different terms. However, a very large negative slope (e.g., $-0.75$) indicates the model is substantially "cheating" on easy pairs using surface cues. Near-zero slopes on easy pairs (for weaker models) indicate the model cannot even exploit simple surface signals.
+A negative ΔRecall is expected and normal — models find it harder to match semantically related but lexically different terms. However, a very large negative ΔRecall (e.g., $-0.75$) indicates the model is substantially "cheating" on easy pairs using surface cues. Near-zero ΔRecall for weaker models arises because their easy-pair recall is already low, not because they handle hard pairs well.
+
+**Retention Rate:**
+
+$$\text{Retention Rate} = \frac{\text{Recall}_{\text{Hard}}}{\text{Recall}_{\text{Easy}}}$$
+
+A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of easy-pair recall survives on hard pairs?" independently of the model's absolute performance level. Values close to **1.0** indicate low semantic decay; values close to **0** indicate near-total collapse on purely semantic pairs. $\text{NaN}$ when $\text{Recall}_{\text{Easy}} = 0$.
 
 ### Audit 5 — Structural Validity (Map Match)
 
@@ -549,85 +561,85 @@ FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower 
 
 ### 7.6 Audit 3 — Differential Item Functioning (Rare-Word Bias)
 
-ΔRecall = Recall(Common) − Recall(Rare). Positive values indicate bias against rare terms. N = 156 common / 156 rare pairs (ELSST); 565 common / 567 rare pairs (APA).
+ΔRecall = Recall(Common) − Recall(Rare). Positive values indicate bias against rare terms. Retention Rate = Recall(Rare) / Recall(Common) — closer to 1.0 = less bias. N = 156 common / 156 rare pairs (ELSST); 565 common / 567 rare pairs (APA).
 
 #### ELSST
 
-| Technique | Model | Recall Common | Recall Rare | ΔRecall |
-|-----------|-------|:-------------:|:-----------:|:-------:|
-| Clustering | All-MPNet-Base-v2 | 0.4615 | 0.4103 | +0.0513 |
-| Clustering | MPNet-Personality | 0.4744 | 0.3910 | +0.0833 |
-| Clustering | SciBERT (SciVocab) | 0.2628 | 0.2051 | +0.0577 |
-| Clustering | BERT Base | 0.3333 | 0.1731 | +0.1603 |
-| Pairwise | All-MPNet-Base-v2 | 0.5064 | 0.3141 | +0.1923 |
-| Pairwise | MPNet-Personality | 0.4487 | 0.2692 | +0.1795 |
-| Pairwise | SciBERT (SciVocab) | 0.2372 | 0.1410 | +0.0962 |
-| Pairwise | BERT Base | 0.1410 | 0.0833 | +0.0577 |
-| Seeded | All-MPNet-Base-v2 | 0.4359 | 0.3205 | +0.1154 |
-| Seeded | MPNet-Personality | 0.3718 | 0.2372 | +0.1346 |
-| Seeded | SciBERT (SciVocab) | 0.3526 | 0.2308 | +0.1218 |
-| Seeded | BERT Base | 0.2821 | 0.1346 | +0.1474 |
+| Technique | Model | Recall Common | Recall Rare | ΔRecall | Retention Rate |
+|-----------|-------|:-------------:|:-----------:|:-------:|:--------------:|
+| Clustering | All-MPNet-Base-v2 | 0.4615 | 0.4103 | +0.0513 | 0.8891 |
+| Clustering | MPNet-Personality | 0.4744 | 0.3910 | +0.0833 | 0.8244 |
+| Clustering | SciBERT (SciVocab) | 0.2628 | 0.2051 | +0.0577 | 0.7804 |
+| Clustering | BERT Base | 0.3333 | 0.1731 | +0.1603 | 0.5194 |
+| Pairwise | All-MPNet-Base-v2 | 0.5064 | 0.3141 | +0.1923 | 0.6202 |
+| Pairwise | MPNet-Personality | 0.4487 | 0.2692 | +0.1795 | 0.5999 |
+| Pairwise | SciBERT (SciVocab) | 0.2372 | 0.1410 | +0.0962 | 0.5945 |
+| Pairwise | BERT Base | 0.1410 | 0.0833 | +0.0577 | 0.5908 |
+| Seeded | All-MPNet-Base-v2 | 0.4359 | 0.3205 | +0.1154 | 0.7352 |
+| Seeded | MPNet-Personality | 0.3718 | 0.2372 | +0.1346 | 0.6380 |
+| Seeded | SciBERT (SciVocab) | 0.3526 | 0.2308 | +0.1218 | 0.6546 |
+| Seeded | BERT Base | 0.2821 | 0.1346 | +0.1474 | 0.4772 |
 
 #### APA
 
-| Technique | Model | Recall Common | Recall Rare | ΔRecall |
-|-----------|-------|:-------------:|:-----------:|:-------:|
-| Clustering | All-MPNet-Base-v2 | 0.5327 | 0.2257 | +0.3070 |
-| Clustering | MPNet-Personality | 0.5310 | 0.2187 | +0.3123 |
-| Clustering | SciBERT (SciVocab) | 0.2655 | 0.1429 | +0.1226 |
-| Clustering | BERT Base | 0.2212 | 0.1693 | **+0.0519** |
-| Pairwise | All-MPNet-Base-v2 | 0.6602 | 0.2557 | +0.4044 |
-| Pairwise | MPNet-Personality | 0.6035 | 0.2257 | +0.3778 |
-| Pairwise | SciBERT (SciVocab) | 0.3062 | 0.1587 | +0.1475 |
-| Pairwise | BERT Base | 0.1770 | 0.0899 | +0.0870 |
-| Seeded | All-MPNet-Base-v2 | 0.6071 | 0.2257 | +0.3813 |
-| Seeded | MPNet-Personality | 0.4938 | 0.1711 | +0.3227 |
-| Seeded | SciBERT (SciVocab) | 0.3168 | 0.2416 | +0.0752 |
-| Seeded | BERT Base | 0.2549 | 0.1517 | +0.1032 |
+| Technique | Model | Recall Common | Recall Rare | ΔRecall | Retention Rate |
+|-----------|-------|:-------------:|:-----------:|:-------:|:--------------:|
+| Clustering | All-MPNet-Base-v2 | 0.5327 | 0.2257 | +0.3070 | 0.4237 |
+| Clustering | MPNet-Personality | 0.5310 | 0.2187 | +0.3123 | 0.4118 |
+| Clustering | SciBERT (SciVocab) | 0.2655 | 0.1429 | +0.1226 | 0.5382 |
+| Clustering | BERT Base | 0.2212 | 0.1693 | **+0.0519** | **0.7653** |
+| Pairwise | All-MPNet-Base-v2 | 0.6602 | 0.2557 | +0.4044 | 0.3873 |
+| Pairwise | MPNet-Personality | 0.6035 | 0.2257 | +0.3778 | 0.3740 |
+| Pairwise | SciBERT (SciVocab) | 0.3062 | 0.1587 | +0.1475 | 0.5183 |
+| Pairwise | BERT Base | 0.1770 | 0.0899 | +0.0870 | 0.5079 |
+| Seeded | All-MPNet-Base-v2 | 0.6071 | 0.2257 | +0.3813 | 0.3718 |
+| Seeded | MPNet-Personality | 0.4938 | 0.1711 | +0.3227 | 0.3465 |
+| Seeded | SciBERT (SciVocab) | 0.3168 | 0.2416 | +0.0752 | 0.7626 |
+| Seeded | BERT Base | 0.2549 | 0.1517 | +0.1032 | 0.5951 |
 
-**Key observations:** The ΔRecall gap is ~3–5× larger on APA than ELSST for MPNet models (e.g., All-MPNet-Base-v2 pairwise: +0.19 on ELSST vs. +0.40 on APA). This suggests the APA thesaurus contains a greater proportion of technical, low-frequency terms that all models fail to match. Interestingly, BERT Base has the lowest ΔRecall on APA clustering (+0.05), but this is a consequence of uniformly poor recall on both subsets, not genuine frequency fairness.
+**Key observations:** The ΔRecall gap is ~3–5× larger on APA than ELSST for MPNet models (e.g., All-MPNet-Base-v2 pairwise: +0.19 on ELSST vs. +0.40 on APA). This suggests the APA thesaurus contains a greater proportion of technical, low-frequency terms that all models fail to match. Interestingly, BERT Base has the lowest ΔRecall on APA clustering (+0.05), but its Retention Rate (0.77) reveals that its low absolute ΔRecall reflects uniformly poor recall on both subsets — not genuine frequency fairness. By contrast, MPNet models with high ΔRecall also have low Retention Rates (~0.37–0.42), meaning they are proportionally more biased against rare terms despite their higher absolute performance.
 
 ---
 
 ### 7.7 Audit 4 — Semantic Decay Results
 
-Slope = Recall(Hard) − Recall(Easy). All slopes are negative. N easy = 152 / N hard = 517 (ELSST); N easy = 1,086 / N hard = 1,447 (APA).
+ΔRecall = Recall(Hard) − Recall(Easy). All values are negative. Retention Rate = Recall(Hard) / Recall(Easy) — closer to 1.0 = less semantic decay. N easy = 152 / N hard = 517 (ELSST); N easy = 1,086 / N hard = 1,447 (APA).
 
 #### ELSST
 
-| Technique | Model | Recall Easy | Recall Hard | Slope |
-|-----------|-------|:-----------:|:-----------:|:-----:|
-| Clustering | All-MPNet-Base-v2 | 0.8684 | 0.2708 | −0.5976 |
-| Clustering | MPNet-Personality | 0.8816 | 0.2495 | −0.6321 |
-| Clustering | SciBERT (SciVocab) | 0.6447 | 0.0600 | −0.5848 |
-| Clustering | BERT Base | 0.6053 | 0.0812 | −0.5240 |
-| Pairwise | All-MPNet-Base-v2 | 0.8816 | 0.1683 | −0.7133 |
-| Pairwise | MPNet-Personality | 0.8816 | 0.1219 | −0.7597 |
-| Pairwise | SciBERT (SciVocab) | 0.5724 | 0.0329 | −0.5395 |
-| Pairwise | BERT Base | 0.4079 | 0.0426 | **−0.3653** |
-| Seeded | All-MPNet-Base-v2 | 0.8289 | 0.1934 | −0.6355 |
-| Seeded | MPNet-Personality | 0.8355 | 0.1199 | −0.7156 |
-| Seeded | SciBERT (SciVocab) | 0.7303 | 0.1044 | −0.6258 |
-| Seeded | BERT Base | 0.6118 | 0.0986 | −0.5132 |
+| Technique | Model | Recall Easy | Recall Hard | ΔRecall | Retention Rate |
+|-----------|-------|:-----------:|:-----------:|:-------:|:--------------:|
+| Clustering | All-MPNet-Base-v2 | 0.8684 | 0.2708 | −0.5976 | 0.3118 |
+| Clustering | MPNet-Personality | 0.8816 | 0.2495 | −0.6321 | 0.2830 |
+| Clustering | SciBERT (SciVocab) | 0.6447 | 0.0600 | −0.5848 | 0.0931 |
+| Clustering | BERT Base | 0.6053 | 0.0812 | −0.5240 | 0.1342 |
+| Pairwise | All-MPNet-Base-v2 | 0.8816 | 0.1683 | −0.7133 | 0.1909 |
+| Pairwise | MPNet-Personality | 0.8816 | 0.1219 | −0.7597 | 0.1383 |
+| Pairwise | SciBERT (SciVocab) | 0.5724 | 0.0329 | −0.5395 | 0.0575 |
+| Pairwise | BERT Base | 0.4079 | 0.0426 | **−0.3653** | 0.1044 |
+| Seeded | All-MPNet-Base-v2 | 0.8289 | 0.1934 | −0.6355 | 0.2333 |
+| Seeded | MPNet-Personality | 0.8355 | 0.1199 | −0.7156 | 0.1435 |
+| Seeded | SciBERT (SciVocab) | 0.7303 | 0.1044 | −0.6258 | 0.1429 |
+| Seeded | BERT Base | 0.6118 | 0.0986 | −0.5132 | 0.1612 |
 
 #### APA
 
-| Technique | Model | Recall Easy | Recall Hard | Slope |
-|-----------|-------|:-----------:|:-----------:|:-----:|
-| Clustering | All-MPNet-Base-v2 | 0.8444 | 0.0968 | −0.7476 |
-| Clustering | MPNet-Personality | 0.8600 | 0.1037 | −0.7564 |
-| Clustering | SciBERT (SciVocab) | 0.3250 | 0.0256 | **−0.2995** |
-| Clustering | BERT Base | 0.3766 | 0.0249 | −0.3517 |
-| Pairwise | All-MPNet-Base-v2 | 0.9273 | 0.1493 | −0.7780 |
-| Pairwise | MPNet-Personality | 0.8978 | 0.1030 | −0.7948 |
-| Pairwise | SciBERT (SciVocab) | 0.3508 | 0.0290 | −0.3218 |
-| Pairwise | BERT Base | 0.2882 | 0.0242 | −0.2640 |
-| Seeded | All-MPNet-Base-v2 | 0.8517 | 0.1272 | −0.7246 |
-| Seeded | MPNet-Personality | 0.8112 | 0.0753 | −0.7359 |
-| Seeded | SciBERT (SciVocab) | 0.3204 | 0.0878 | −0.2327 |
-| Seeded | BERT Base | 0.3941 | 0.0463 | −0.3478 |
+| Technique | Model | Recall Easy | Recall Hard | ΔRecall | Retention Rate |
+|-----------|-------|:-----------:|:-----------:|:-------:|:--------------:|
+| Clustering | All-MPNet-Base-v2 | 0.8444 | 0.0968 | −0.7476 | 0.1147 |
+| Clustering | MPNet-Personality | 0.8600 | 0.1037 | −0.7564 | 0.1206 |
+| Clustering | SciBERT (SciVocab) | 0.3250 | 0.0256 | **−0.2995** | 0.0787 |
+| Clustering | BERT Base | 0.3766 | 0.0249 | −0.3517 | 0.0661 |
+| Pairwise | All-MPNet-Base-v2 | 0.9273 | 0.1493 | −0.7780 | 0.1610 |
+| Pairwise | MPNet-Personality | 0.8978 | 0.1030 | −0.7948 | 0.1147 |
+| Pairwise | SciBERT (SciVocab) | 0.3508 | 0.0290 | −0.3218 | 0.0827 |
+| Pairwise | BERT Base | 0.2882 | 0.0242 | −0.2640 | 0.0840 |
+| Seeded | All-MPNet-Base-v2 | 0.8517 | 0.1272 | −0.7246 | 0.1493 |
+| Seeded | MPNet-Personality | 0.8112 | 0.0753 | −0.7359 | 0.0928 |
+| Seeded | SciBERT (SciVocab) | 0.3204 | 0.0878 | −0.2327 | 0.2741 |
+| Seeded | BERT Base | 0.3941 | 0.0463 | −0.3478 | 0.1175 |
 
-**Key observations:** The semantic decay slope is universally severe. Even the best model (All-MPNet-Base-v2 pairwise on ELSST) drops from recall 0.88 on easy pairs to 0.17 on hard pairs — a slope of −0.71. Hard positives that have zero character overlap represent the core challenge of the task: these require genuinely semantic rather than surface-level matching. The MPNet models have the highest easy recall (≥ 0.88) but also the steepest slopes, indicating strong surface sensitivity. BERT models have lower easy recall (0.29–0.61) but shallower slopes — not because they handle hard pairs better, but because their easy-pair recall is already low.
+**Key observations:** The semantic decay ΔRecall is universally severe. Even the best model (All-MPNet-Base-v2 pairwise on ELSST) drops from recall 0.88 on easy pairs to 0.17 on hard pairs (ΔRecall = −0.71; Retention Rate = 0.19). Hard positives with zero character overlap represent the core challenge: these require genuinely semantic rather than surface-level matching. The MPNet models have the highest easy recall (≥ 0.88) and also the lowest Retention Rates (0.11–0.23), revealing strong surface sensitivity relative to their own capability. BERT models show shallower ΔRecall but similarly low Retention Rates — their easy-pair recall is already low, so there is less absolute room to fall.
 
 ---
 
