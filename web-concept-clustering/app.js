@@ -397,9 +397,11 @@ function clusterHDBSCAN(concepts, simMatrix, minClusterSize, minSamples, cluster
             condenseFrom(right, cR, lambda);
 
         } else if (leftBig) {
-            // Right too small → right points fall OUT of ci at this lambda
+            // Right too small → right points fall OUT of ci at this lambda.
+            // They are still members of ci (their fall-out lambda = lambda here).
             const fallen = getLeaves(right);
             clStability[ci] += fallen.length * (lambda - clusterBirth);
+            for (const leaf of fallen) nodeCluster[leaf] = ci; // track membership
             // Left continues as THE SAME cluster ci (birth unchanged)
             condenseFrom(left, ci, clusterBirth);
 
@@ -407,6 +409,7 @@ function clusterHDBSCAN(concepts, simMatrix, minClusterSize, minSamples, cluster
             // Left too small → left points fall out
             const fallen = getLeaves(left);
             clStability[ci] += fallen.length * (lambda - clusterBirth);
+            for (const leaf of fallen) nodeCluster[leaf] = ci; // track membership
             condenseFrom(right, ci, clusterBirth);
 
         } else {
