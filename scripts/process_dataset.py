@@ -28,24 +28,26 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
 from typing import Dict, List, Set, Tuple, Optional
+from pathlib import Path
 
 from tqdm import tqdm
 
 # =========================
-# DEFAULTS
+# PROJECT ROOT & DEFAULTS
 # =========================
 
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DEFAULT_SEED = 42
 DEFAULT_TRAIN_RATIO = 0.70
 
 DEFAULT_INPUT_PATHS = {
-    "elsst": "datasets/raw_datasets/ELSST_R5.rdf",
-    "apa": "datasets/raw_datasets/APA.xml",
+    "elsst": str(PROJECT_ROOT / "datasets/raw_datasets/ELSST_R5.rdf"),
+    "apa": str(PROJECT_ROOT / "datasets/raw_datasets/APA.xml"),
 }
 
 DEFAULT_OUTPUT_DIRS = {
-    "elsst": "datasets/processed_datasets/elsst",
-    "apa": "datasets/processed_datasets/apa",
+    "elsst": str(PROJECT_ROOT / "datasets/processed_datasets/elsst"),
+    "apa": str(PROJECT_ROOT / "datasets/processed_datasets/apa"),
 }
 
 # Negatives config
@@ -702,17 +704,17 @@ def process_dataset(
 if __name__ == "__main__":
     # process ELSST with default settings
     
-    # process_dataset(
-    #     dataset="elsst", input_path='datasets/raw_datasets/ELSST_R5.rdf', 
-    #     output_dir='datasets/processed_datasets/elsst',
-    #     train_ratio=0.70, seed=42, generate_all_negatives=True, 
-    #     exclude_related_from_negatives=False
-    # )
+    process_dataset(
+        dataset="elsst", input_path=str(PROJECT_ROOT / 'datasets/raw_datasets/ELSST_R5.rdf'), 
+        output_dir=str(PROJECT_ROOT / 'datasets/processed_datasets/elsst'),
+        train_ratio=0.70, seed=42, generate_all_negatives=True, 
+        exclude_related_from_negatives=False
+    )
     
     # process APA with the same settings
     process_dataset(
-        dataset="apa", input_path='datasets/raw_datasets/APA.xml', 
-        output_dir='datasets/processed_datasets/apa',
+        dataset="apa", input_path=str(PROJECT_ROOT / 'datasets/raw_datasets/APA.xml'), 
+        output_dir=str(PROJECT_ROOT / 'datasets/processed_datasets/apa'),
         train_ratio=0.70, seed=42, generate_all_negatives=True, 
         exclude_related_from_negatives=False
     )

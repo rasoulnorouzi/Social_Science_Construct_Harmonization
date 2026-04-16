@@ -1,4 +1,8 @@
 import numpy as np
+from pathlib import Path
+
+# Project Root - Works on any machine/OS
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 # Random Seed
 SEED = 42
@@ -7,19 +11,19 @@ SEED = 42
 DATA_PATHS = {
     'elsst': 
     {
-        'pos_pairs': 'datasets/processed_datasets/elsst/train_positive_pairs.csv',
-        'neg_pairs': 'datasets/processed_datasets/elsst/train_negative_pairs.csv',
-        'results_csv': 'results/elsst/csv_reports',
-        'csv_reports': 'results/elsst/pairwise_results.csv',
-        'plots': 'results/elsst/plots'
+        'pos_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/elsst/train_positive_pairs.csv'),
+        'neg_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/elsst/train_negative_pairs.csv'),
+        'results_csv': str(PROJECT_ROOT / 'results/elsst/csv_reports'),
+        'csv_reports': str(PROJECT_ROOT / 'results/elsst/pairwise_results.csv'),
+        'plots': str(PROJECT_ROOT / 'results/elsst/plots')
     }
     ,
     'apa': 
     {
-        'pos_pairs': 'datasets/processed_datasets/apa/train_positive_pairs.csv',
-        'neg_pairs': 'datasets/processed_datasets/apa/train_negative_pairs.csv',
-        'results_csv': 'results/apa/csv_reports',
-        'plots': 'results/apa/plots'
+        'pos_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/apa/train_positive_pairs.csv'),
+        'neg_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/apa/train_negative_pairs.csv'),
+        'results_csv': str(PROJECT_ROOT / 'results/apa/csv_reports'),
+        'plots': str(PROJECT_ROOT / 'results/apa/plots')
 
     }
 }

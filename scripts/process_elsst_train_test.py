@@ -15,6 +15,7 @@ import gc
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
 from typing import Dict, List, Set, Tuple, Optional, Iterable
+from pathlib import Path
 
 from rdflib import Graph, Namespace
 from rdflib.term import URIRef, Literal
@@ -26,8 +27,9 @@ from tqdm import tqdm
 # CONFIG
 # =========================
 
-RDF_FILE_PATH = "datasets/raw_datasets/ELSST_R5.rdf"
-OUTPUT_DIR = "datasets/processed_datasets/elsst"
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+RDF_FILE_PATH = str(PROJECT_ROOT / "datasets/raw_datasets/ELSST_R5.rdf")
+OUTPUT_DIR = str(PROJECT_ROOT / "datasets/processed_datasets/elsst")
 
 LANGUAGE = "en"
 RANDOM_SEED = 42
