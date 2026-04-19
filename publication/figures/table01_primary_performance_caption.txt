@@ -1,0 +1,1 @@
+Table 1. Primary performance metrics by dataset, technique, and model. Best F1 per dataset-technique block is bolded.

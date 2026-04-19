@@ -1,0 +1,1 @@
+Calibration Figure C2. For each model, heatmap of F1 across HDBSCAN parameters (min_cluster_size, min_samples) at that model’s best-performing embedding dimensionality setting (n_components).

@@ -1,0 +1,1 @@
+Figure 9. Radar summary of five diagnostics per model, normalized to [0,1] within each dataset.
