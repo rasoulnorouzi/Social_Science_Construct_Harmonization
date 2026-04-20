@@ -1,1 +1,0 @@
-Table 2. Per-model diagnostic summary (means across techniques) for each dataset.

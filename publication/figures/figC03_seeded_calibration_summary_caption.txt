@@ -1,1 +1,0 @@
-Calibration Figure C3. Seeded calibration stage. If detailed training sweep CSV is available, model-specific sweep landscapes are shown; otherwise the panel reports selected seeded parameters and observed seeded F1 in ELSST/APA.

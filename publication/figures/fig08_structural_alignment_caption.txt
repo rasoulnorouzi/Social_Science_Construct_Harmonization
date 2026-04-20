@@ -1,1 +1,0 @@
-Figure 8. Absolute point-biserial correlation between model-derived binary distance and expert shortest-path distance.

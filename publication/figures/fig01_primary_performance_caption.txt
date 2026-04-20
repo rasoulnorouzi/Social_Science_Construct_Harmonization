@@ -1,1 +1,0 @@
-Figure 1. F1 performance overview across techniques. Circles denote ELSST and squares denote APA; gray connectors show within-model dataset shifts and text reports ΔF1 (ELSST − APA).

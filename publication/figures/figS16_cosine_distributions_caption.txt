@@ -1,1 +1,0 @@
-Figure S16. Violin distributions of cosine similarity by confusion outcome class; calibrated threshold is shown when available.

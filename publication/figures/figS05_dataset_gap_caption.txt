@@ -1,1 +1,0 @@
-Figure S5. F1 gap between ELSST and APA per model-technique combination, sorted by ELSST F1.

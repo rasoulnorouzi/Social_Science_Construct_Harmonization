@@ -1,5 +1,7 @@
-datasets/processed_datasets/
+datasets/
 logs/
 datasets/raw_datasets
 taxonomy-dashboard/
 tests/test_output
+analysis/publication/
+
