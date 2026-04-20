@@ -1,0 +1,1 @@
+Figure 4. Stability under Gaussian embedding perturbation: mean F1 across noise levels with SEM ribbons. Red stars mark sem > 0.02.

@@ -1,0 +1,1 @@
+Figure S6. Heatmap of SEM at noise level σ=0.3 (sequential red scale).

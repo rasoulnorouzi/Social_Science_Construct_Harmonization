@@ -13,17 +13,20 @@ DATA_PATHS = {
     {
         'pos_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/elsst/train_positive_pairs.csv'),
         'neg_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/elsst/train_negative_pairs.csv'),
-        'results_csv': str(PROJECT_ROOT / 'results/elsst/csv_reports'),
-        'csv_reports': str(PROJECT_ROOT / 'results/elsst/pairwise_results.csv'),
-        'plots': str(PROJECT_ROOT / 'results/elsst/plots')
+        'results_csv': str(PROJECT_ROOT / 'analysis/results/elsst/callibrations_results'),
+        'callibrations_results': str(PROJECT_ROOT / 'analysis/results/elsst/callibrations_results/pairwise_results.csv'),
+        'csv_reports': str(PROJECT_ROOT / 'analysis/results/elsst/callibrations_results/pairwise_results.csv'),
+        'plots': str(PROJECT_ROOT / 'analysis/results/elsst/plots')
     }
     ,
     'apa': 
     {
         'pos_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/apa/train_positive_pairs.csv'),
         'neg_pairs': str(PROJECT_ROOT / 'datasets/processed_datasets/apa/train_negative_pairs.csv'),
-        'results_csv': str(PROJECT_ROOT / 'results/apa/csv_reports'),
-        'plots': str(PROJECT_ROOT / 'results/apa/plots')
+        'results_csv': str(PROJECT_ROOT / 'analysis/results/apa/callibrations_results'),
+        'callibrations_results': str(PROJECT_ROOT / 'analysis/results/apa/callibrations_results/pairwise_results.csv'),
+        'csv_reports': str(PROJECT_ROOT / 'analysis/results/apa/callibrations_results/pairwise_results.csv'),
+        'plots': str(PROJECT_ROOT / 'analysis/results/apa/plots')
 
     }
 }
@@ -108,4 +111,3 @@ BEST_SEEDED_PARAMS = {
 
 NOISE_LEVELS = [0.0, 0.05, 0.1, 0.2, 0.3]
 N_RELIABILITY_RUNS = 10
-

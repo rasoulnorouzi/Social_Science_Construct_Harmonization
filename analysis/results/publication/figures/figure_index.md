@@ -1,0 +1,36 @@
+# Figure Index
+
+- figC01_pairwise_threshold_calibration: Pairwise training threshold calibration curves.
+- figC02_clustering_hyperparameter_calibration: Clustering training hyperparameter heatmaps.
+- figC03_seeded_calibration_summary: Seeded calibration sweep or fallback selection summary.
+- tableC01_pairwise_best_thresholds: Pairwise best-threshold table.
+- tableC02_clustering_best_settings: Clustering best-setting table.
+- tableC03_calibration_parameters: Consolidated calibration parameter table.
+- fig01_primary_performance: Cleveland-style F1 overview by technique.
+- fig02_precision_recall_tradeoff: Precision-recall scatter with iso-F1 contours.
+- fig03_f1_heatmap: Model-by-dataset-technique F1 heatmap.
+- fig04_embedding_stability: Noise robustness lines with SEM ribbons.
+- fig05_lexical_trap_fpr: Log-scale hard/easy negative FPR lollipops.
+- fig06_semantic_decay: Easy-vs-hard recall slope chart.
+- fig07_rare_word_retention: Rare-word retention grouped bars.
+- fig08_structural_alignment: Absolute biserial structural alignment bars.
+- fig09_diagnostic_radar: Five-axis diagnostic radar panels.
+- table01_primary_performance: Publication table rendering of primary metrics.
+- table02_diagnostic_summary: Publication table rendering of diagnostic aggregates.
+- figS01_confusion_matrices: Row-normalized confusion matrices.
+- figS02_semantic_retention: Semantic retention heatmap.
+- figS03_rare_common_recall: Common vs rare recall bars.
+- figS04_cosine_structural: Spearman vs Pearson cosine-structural scatter.
+- figS05_dataset_gap: ELSST-APA F1 gaps.
+- figS06_stability_sigma03: SEM heatmap at sigma 0.3.
+- figS07_mini_panels: Six compact diagnostic summaries.
+- figS09_cluster_size_violin: Cluster-size violin distributions.
+- figS10_noise_fraction: Clustering noise fraction bars.
+- figS11_lexical_trap_examples: Fooled/resisted lexical-trap examples.
+- figS12_semantic_decay_examples: Missed/caught semantic-decay examples.
+- figS13_rare_missed_common_caught: Rare missed vs common caught examples.
+- figS14_cross_model_agreement: Agreement category examples.
+- figS15_structural_examples: Structural example scatter.
+- figS16_cosine_distributions: Outcome violin plot of cosine scores.
+- figS17_pr_curves: Precision-recall curves with calibrated thresholds.
+- figS18_error_overlap: Error overlap bars and irreducible examples.

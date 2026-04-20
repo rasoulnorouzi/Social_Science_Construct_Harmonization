@@ -1,0 +1,1 @@
+Figure S2. Retention ratio (recall_hard / recall_easy) heatmap centered at 0.20.
