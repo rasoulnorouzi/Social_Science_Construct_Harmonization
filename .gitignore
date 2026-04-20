@@ -1,7 +1,7 @@
-datasets/
 logs/
-datasets/raw_datasets
+datasets/raw_datasets/APA.xml
+datasets/processed_datasets/
 taxonomy-dashboard/
-tests/test_output
+tests/
 analysis/publication/
 
