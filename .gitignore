@@ -4,4 +4,5 @@ datasets/processed_datasets/
 taxonomy-dashboard/
 tests/
 analysis/publication/
-
+myenv/
+venv/
