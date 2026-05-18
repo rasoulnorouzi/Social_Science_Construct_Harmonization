@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m jupyter nbconvert --to notebook --execute publication_figures.ipynb --output _exec_test.ipynb --ExecutePreprocessor.timeout=600)"
+    ]
+  }
+}
