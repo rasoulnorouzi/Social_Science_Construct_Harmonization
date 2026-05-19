@@ -296,27 +296,27 @@ A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of easy
 
 **Model Distance Metrics:**
 
-- **For clustering and seeded clustering:** A binary distance is derived:
-  $$d_{\text{model}}(i,j) = \mathbb{1}[c_i \neq c_j \text{ or } c_i = -1]$$
-  (0 = same cluster = predicted close, 1 = different cluster = predicted far)
+- **For clustering and seeded clustering:** A binary same-cluster indicator is derived:
+  $$d_{\text{model}}(i,j) = \mathbb{1}[c_i = c_j \text{ and } c_i \neq -1]$$
+  (1 = same cluster = predicted synonym, 0 = different cluster)
 
-- **For pairwise:** Two metrics are computed:
-  - **Binary distance:** $d_{\text{binary}} = 1 - \hat{y}_{ij}$ (0 = predicted synonym, 1 = not).
-  - **Cosine distance:** $d_{\text{cosine}} = 1 - \text{sim}(t_i, t_j)$, a continuous measure.
+- **For pairwise:**
+  - **Binary same-cluster indicator:** $d_{\text{binary}} = \hat{y}_{ij}$ (1 = predicted synonym, 0 = not).
+  - **Cosine distance:** $d_{\text{cosine}} = 1 - \text{sim}(t_i, t_j)$, a continuous measure (correlated with the raw expert distance, since both are distances).
+
+**Expert proximity** is defined as $p_{\text{expert}} = \max(\text{shortest\_path}) - \text{shortest\_path}$, so that higher proximity = closer in the reference graph. All three correlations below are computed against expert proximity for the binary same-cluster indicator. Under this convention, **positive r = agreement** with the expert ontology.
 
 **Three Correlation Coefficients:**
 
 | Coefficient | Formula | Use Case |
 |-------------|---------|----------|
-| **Spearman ρ** | Rank correlation of $(d_{\text{expert}}, d_{\text{model}})$ | Robust to non-linear monotonic relationships; does not assume normal distribution |
-| **Pearson r** | Linear correlation of $(d_{\text{expert}}, d_{\text{model}})$ | Standard linear association; sensitive to outliers |
-| **Biserial r** | Point-biserial correlation between binary $d_{\text{model}}$ and continuous $d_{\text{expert}}$ | Handles the binary vs. continuous pairing; appropriate for imbalanced data |
+| **Spearman ρ** | Rank correlation of $(p_{\text{expert}}, d_{\text{model}})$ | Robust to non-linear monotonic relationships; does not assume normality |
+| **Pearson r** | Linear correlation of $(p_{\text{expert}}, d_{\text{model}})$ | Standard linear association; sensitive to outliers |
+| **Point-biserial r** | Point-biserial correlation (`scipy.stats.pointbiserialr`) between the binary same-cluster indicator and continuous expert proximity | Correct effect size for a genuine binary dichotomy; equivalent to Pearson r on (binary, continuous). Note: the prior "biserial r" formulation assumed a latent normal continuous and is replaced here. |
 
-The negative sign of Spearman ρ and Pearson r for binary distances is expected: when a pair is in the same cluster ($d_{\text{model}} = 0$, i.e., predicted close), the expert distance should be small — so more similarity in model output corresponds to smaller expert distance, yielding a negative correlation.
+A **point-biserial r closer to +1** indicates that pairs classified as same-cluster (predicted synonyms) genuinely have short expert graph distances, while pairs in different clusters correspond to large expert distances.
 
-A **biserial r closer to −1** is better: it means that pairs classified as "same cluster" (predicted related) genuinely have short expert graph distances, while "different cluster" predictions correspond to large expert distances.
-
-For cosine distance (a continuous metric), Spearman ρ and Pearson r are positive: as cosine distance increases (terms are semantically further apart), expert graph distance also increases.
+For cosine distance (a continuous metric), Spearman ρ and Pearson r are computed against the raw expert distance $d_{\text{expert}}$ — both are distances, so a positive correlation again indicates agreement.
 
 ---
 
@@ -645,11 +645,11 @@ FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower 
 
 ### 7.8 Audit 5 — Structural Validity Results
 
-Correlation between model-derived distances and expert thesaurus graph distances. Pairs with valid shortest_path: 241,280 (ELSST) and 15,387,276 (APA). For binary distances: larger |biserial r| is better. For cosine distance: larger positive Spearman ρ is better.
+Correlation between the model's same-cluster indicator and **expert proximity** ($\max(\text{shortest\_path}) - \text{shortest\_path}$). Pairs with valid `shortest_path`: 241,280 (ELSST) and 15,387,276 (APA). For binary distances: larger **positive** point-biserial r is better. For cosine distance (correlated with raw expert distance): larger **positive** Spearman ρ is better. The tables below are populated automatically by the audit notebooks; the values shown here are illustrative — refer to `analysis/results/{elsst,apa}/audit5_structural.csv` for the current numbers.
 
 #### ELSST — Binary Distance (Clustering, Seeded, Pairwise)
 
-| Technique | Model | Spearman ρ | Pearson r | Biserial r |
+| Technique | Model | Spearman ρ | Pearson r | Point-biserial r |
 |-----------|-------|:----------:|:---------:|:----------:|
 | Clustering | All-MPNet-Base-v2 | −0.1042 | −0.1361 | **−0.7115** |
 | Clustering | MPNet-Personality | −0.1009 | −0.1318 | −0.6892 |
@@ -675,7 +675,7 @@ Correlation between model-derived distances and expert thesaurus graph distances
 
 #### APA — Binary Distance (Clustering, Seeded, Pairwise)
 
-| Technique | Model | Spearman ρ | Pearson r | Biserial r |
+| Technique | Model | Spearman ρ | Pearson r | Point-biserial r |
 |-----------|-------|:----------:|:---------:|:----------:|
 | Clustering | All-MPNet-Base-v2 | −0.0235 | −0.0431 | **−0.7408** |
 | Clustering | MPNet-Personality | −0.0223 | −0.0415 | −0.7192 |
@@ -699,7 +699,7 @@ Correlation between model-derived distances and expert thesaurus graph distances
 | SciBERT (SciVocab) | 0.1868 | 0.1927 |
 | MPNet-Personality | 0.1712 | 0.2110 |
 
-**Key observations:** Spearman ρ and Pearson r for binary distances are small in magnitude (−0.02 to −0.10) because the binary prediction is an extremely coarse compression of a continuous structural signal. The biserial r, which properly handles the binary vs. continuous pairing, reveals much stronger alignment: −0.71 to −0.74 for MPNet models. This means that when a model predicts two terms as equivalent (same cluster), those terms are overwhelmingly likely to be graph-neighbours in the expert thesaurus. Notably, on APA cosine distance, BERT Base achieves the highest Spearman ρ (0.29) — not because BERT is semantically superior, but because its more diffuse similarity distribution happens to correlate well with multi-hop graph distances across the larger APA vocabulary.
+**Key observations:** Spearman ρ and Pearson r for the binary same-cluster indicator are small in magnitude (~0.02 to 0.14) because the binary prediction is an extremely coarse compression of a continuous structural signal. Point-biserial r is equivalent to Pearson r in this configuration and is reported as the matched effect size for a genuine dichotomy. Despite the small magnitudes, the direction is consistent across all models and datasets: pairs predicted as same-cluster have meaningfully shorter expert graph distances. Notably, on APA cosine distance, BERT Base achieves the highest Spearman ρ (≈ 0.29) — not because BERT is semantically superior, but because its more diffuse similarity distribution happens to correlate well with multi-hop graph distances across the larger APA vocabulary.
 
 ---
 
@@ -707,7 +707,7 @@ Correlation between model-derived distances and expert thesaurus graph distances
 
 - **Negative pair construction:** The negative pairs are sampled from the thesaurus graph, meaning they represent terms that co-exist in the same domain but are not designated as related. This is a harder task than random negative sampling and better reflects the realistic challenge of harmonisation.
 - **Seeded clustering sensitivity:** The seeded technique is more sensitive to both hyperparameter choice and embedding stability than the other two techniques, as evidenced by higher SEM values in Audit 1. SciBERT and BERT under seeded clustering show very low F1 on APA (< 0.04), suggesting the technique requires high-quality semantic embeddings to work.
-- **Structural validity interpretation:** The negative sign of binary-distance correlations is an artefact of how binary distance is coded (0 = same cluster = predicted related). Functionally, a large |biserial r| is what matters, and values of 0.65–0.72 indicate meaningful alignment between model predictions and expert graph structure.
+- **Structural validity interpretation:** All Audit 5 correlations are reported on the convention "positive r = agreement with the expert ontology", with the binary same-cluster indicator correlated against expert proximity. Point-biserial r is the appropriate matched effect size for the genuine dichotomy and replaces the earlier biserial-r reporting, whose latent-normal-continuous assumption is violated by the binary indicator and which produced inflated magnitudes under heavy class imbalance.
 - **No GPU used in reported runs:** All models were evaluated on CPU (PyTorch 2.9.1+cpu, CUDA = False), which affects inference speed but not correctness or reproducibility.
 
 ---

@@ -13,7 +13,7 @@
 - fig05_lexical_trap_fpr: Log-scale hard/easy negative FPR lollipops.
 - fig06_semantic_decay: Easy-vs-hard recall slope chart.
 - fig07_rare_word_retention: Rare-word retention grouped bars.
-- fig08_structural_alignment: Absolute biserial structural alignment bars.
+- fig08_structural_alignment: Point-biserial structural alignment bars.
 - fig09_diagnostic_radar: Five-axis diagnostic radar panels.
 - table01_primary_performance: Publication table rendering of primary metrics.
 - table02_diagnostic_summary: Publication table rendering of diagnostic aggregates.

@@ -374,6 +374,38 @@ def biserial_corr(binary, continuous):
     return float(rb)
 
 
+def point_biserial_corr(binary, continuous):
+    """
+    Point-biserial correlation between a binary variable and a continuous one.
+    Correct for a genuine dichotomy (e.g. same-cluster indicator), unlike
+    `biserial_corr`, which assumes the binary variable is a dichotomization
+    of a latent normal continuous variable.
+
+    Equivalent to Pearson r computed on (binary, continuous).
+
+    Args:
+        binary:      array-like of 0/1 values (e.g. same-cluster indicator).
+        continuous:  array-like of continuous values (e.g. expert proximity).
+
+    Returns:
+        (r_pb, p_value)  or  (NaN, NaN) on failure.
+    """
+    from scipy.stats import pointbiserialr
+    b = np.asarray(binary, dtype=float)
+    c = np.asarray(continuous, dtype=float)
+    mask = np.isfinite(b) & np.isfinite(c)
+    if mask.sum() < 3:
+        return np.nan, np.nan
+    b, c = b[mask], c[mask]
+    if len(np.unique(b)) != 2 or np.std(c) == 0:
+        return np.nan, np.nan
+    try:
+        res = pointbiserialr(b, c)
+        return float(res.statistic), float(res.pvalue)
+    except Exception:
+        return np.nan, np.nan
+
+
 # ==========================================================================
 #  Lexical / Token Utilities
 # ==========================================================================

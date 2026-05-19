@@ -1,1 +1,1 @@
-Figure 8. Absolute point-biserial correlation between model-derived binary distance and expert shortest-path distance.
+Figure 8. Point-biserial correlation between the model same-cluster indicator and expert proximity (max_path − shortest_path). Positive r = agreement with the reference ontology.
