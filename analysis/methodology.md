@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the technical methodology used to evaluate machine-learning models for the task of **concept harmonisation** in social science thesauri. The evaluation is conducted across two independent datasets — **ELSST** (European Language Social Science Thesaurus) and **APA** (American Psychological Association Thesaurus) — using three harmonisation techniques and five psychometric audits. The goal is to determine which sentence-embedding model and which harmonisation strategy most reliably identifies synonymous or closely-related social science concepts.
+This document describes the technical methodology used to evaluate machine-learning models for the task of **concept harmonisation** in social science thesauri. The evaluation is conducted across two independent datasets — **ELSST** (European Language Social Science Thesaurus) and **APA** (American Psychological Association Thesaurus) — using three harmonisation techniques and five diagnostic tests. The goal is to determine which sentence-embedding model and which harmonisation strategy most reliably identifies synonymous or closely-related social science concepts.
 
 ---
 
@@ -23,7 +23,7 @@ Each dataset is represented as a collection of **labelled term pairs**:
 For ELSST, only the **held-out test split** is used in the final evaluation. For APA — because it was never involved in any hyperparameter calibration — the **full dataset (train + test merged)** is evaluated, giving the most conservative and unbiased estimate of out-of-distribution generalisation.
 
 Additional metadata available for each pair:
-- `shortest_path`: the graph distance (number of hops) between two terms in the expert thesaurus. Used exclusively in Audit 5 (Structural Validity).
+- `shortest_path`: the graph distance (number of hops) between two terms in the expert thesaurus. Used exclusively in the Structural alignment test.
 
 ### 1.2 Models Evaluated
 
@@ -66,7 +66,7 @@ This normalisation ensures that cosine similarity reduces to a simple dot produc
 
 $$\cos(e_i, e_j) = \hat{e}_i \cdot \hat{e}_j$$
 
-The cache stores both the raw (unnormalised) embeddings and the normalised versions, as both are required by different parts of the pipeline (raw embeddings are used for noise injection in Audit 1).
+The cache stores both the raw (unnormalised) embeddings and the normalised versions, as both are required by different parts of the pipeline (raw embeddings are used for noise injection in the Embedding stability test).
 
 ---
 
@@ -179,13 +179,13 @@ The **F1 score** is the primary ranking metric because the dataset is highly cla
 
 ---
 
-## 5. Psychometric Audits
+## 5. Diagnostic Tests
 
-Beyond standard accuracy metrics, five psychometric audits probe specific vulnerabilities and qualities of each model-technique combination. Audit masks are **precomputed once** and reused across all models.
+Beyond aggregate performance, five diagnostic tests probe failure modes that summary scores can obscure. Each test uses precomputed pair subsets held constant across all models.
 
-### Audit 1 — Reliability (Embedding Stability / SEM)
+### 5.1 Embedding stability test
 
-**Objective:** Quantify how sensitive each model's predictions are to small random perturbations of the embedding space. This is analogous to test-retest reliability in psychometrics.
+**Objective:** Quantify how sensitive each model's predictions are to small random perturbations of the embedding space. This is analogous to test-retest reliability in classical test theory, though it measures system-level F1 stability under artificial perturbation rather than individual score consistency.
 
 **Method:**
 
@@ -209,9 +209,9 @@ $$\text{SEM} = \text{SD}_{F_1} \cdot \sqrt{1 - \text{ICC}}$$
 
 where $\text{SD}_{F_1}$ is the standard deviation of F1 scores across the $k$ runs. A lower SEM indicates the model produces stable, reproducible results even under embedding perturbation. SEM = 0 at noise level σ = 0 is expected (deterministic inputs produce identical outputs).
 
-### Audit 2 — Discriminant Validity (Lexical Trap Test)
+### 5.2 Lexical trap test
 
-**Objective:** Detect whether models confuse orthographically similar but semantically unrelated terms (i.e., they are "fooled" by surface-level form rather than meaning).
+**Objective:** A valid harmonization system should separate surface form from conceptual content (Campbell & Fiske, 1959). This test detects whether models confuse orthographically similar but semantically unrelated terms (i.e., they are "fooled" by surface-level form rather than meaning).
 
 **Lexical Similarity via Character 3-Gram Jaccard:**
 
@@ -223,8 +223,8 @@ This is computed for all negative pairs (label = 0).
 
 **Subset Definitions:**
 
-- **Hard Negatives (Lexical Traps):** $J(t_i, t_j) > 0.5$ — high surface similarity; these are the difficult cases where a naive model might incorrectly predict synonymy.
-- **Easy Negatives:** $J(t_i, t_j) = 0.0$ — zero character overlap; these should be trivially rejected by any model.
+- **Lexical traps (hard negatives):** $J(t_i, t_j) > 0.5$ — high surface similarity; these are the difficult cases where a naive model might incorrectly predict synonymy.
+- **Easy negatives:** $J(t_i, t_j) = 0.0$ — zero character overlap; these should be trivially rejected by any model.
 
 **Evaluation Metric — False Positive Rate (FPR):**
 
@@ -234,9 +234,9 @@ $$\text{FPR} = \frac{FP}{FP + TN}$$
 
 A low FPR on hard negatives means the model correctly rejects lexically-similar but semantically-distinct pairs — good discriminant validity. A high FPR on hard negatives (relative to easy negatives) reveals that the model is using surface cues rather than semantic understanding.
 
-### Audit 3 — Differential Item Functioning (Rare-Word Bias)
+### 5.3 Rare-word bias test
 
-**Objective:** Detect whether models systematically underperform on pairs containing rare or technical vocabulary — a form of demographic/lexical bias known as **Differential Item Functioning (DIF)** in psychometrics.
+**Objective:** Embedding models produce degenerate representations for infrequent tokens, collapsing semantic distinctions in narrow regions of the vector space (Yu et al., 2022). This test detects whether models systematically underperform on pairs containing rare or technical vocabulary.
 
 **Term Frequency via Zipf Scale:**
 
@@ -253,7 +253,7 @@ For each positive pair, a pair-level frequency score is computed as the average 
 - **Common pairs:** top 10th percentile of pair frequency (high Zipf scores).
 - **Rare pairs:** bottom 10th percentile of pair frequency (low Zipf scores).
 
-**DIF Metric:**
+**Recall Gap:**
 
 $$\Delta\text{Recall} = \text{Recall}_{\text{Common}} - \text{Recall}_{\text{Rare}}$$
 
@@ -265,13 +265,13 @@ $$\text{Retention Rate} = \frac{\text{Recall}_{\text{Rare}}}{\text{Recall}_{\tex
 
 A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of the model's common-word recall survives on rare words?" independently of the model's absolute performance level. Values close to **1.0** indicate low bias; values close to **0** indicate strong rare-word penalty. $\text{NaN}$ when $\text{Recall}_{\text{Common}} = 0$.
 
-### Audit 4 — Semantic Decay (Semantic Gap Test)
+### 5.4 Semantic decay test
 
-**Objective:** Test whether models can recognise synonymy when there is no lexical overlap between the two terms — i.e., when purely semantic (not surface) understanding is required.
+**Objective:** Test whether models can recognise synonymy when there is no lexical overlap between the two terms — i.e., when purely semantic (not surface) understanding is required. Prior work on scientific synonymy detection has shown that high performance on some datasets is partly explained by morphological resemblance rather than genuine semantic understanding (Thießen & Stocker, 2024), which motivates testing this distinction directly.
 
 **Subset Definitions (Positive Pairs Only):**
 
-Using the same character 3-gram Jaccard measure as Audit 2, but applied to positive pairs:
+Using the same character 3-gram Jaccard measure as the Lexical trap test, but applied to positive pairs:
 
 - **Easy positives:** $J(t_i, t_j) > 0.5$ — terms share substantial orthographic overlap (e.g., "psychology" / "psychological"). The model can exploit surface cues.
 - **Hard positives:** $J(t_i, t_j) = 0.0$ — zero character overlap (e.g., "happiness" / "wellbeing"). The model must rely entirely on semantic representation.
@@ -288,35 +288,30 @@ $$\text{Retention Rate} = \frac{\text{Recall}_{\text{Hard}}}{\text{Recall}_{\tex
 
 A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of easy-pair recall survives on hard pairs?" independently of the model's absolute performance level. Values close to **1.0** indicate low semantic decay; values close to **0** indicate near-total collapse on purely semantic pairs. $\text{NaN}$ when $\text{Recall}_{\text{Easy}} = 0$.
 
-### Audit 5 — Structural Validity (Map Match)
+### 5.5 Structural alignment test
 
-**Objective:** Assess whether the model's internal distance metric reflects the structure of the expert-curated thesaurus graph — i.e., whether the model "understands" conceptual distance the way domain experts do.
+**Objective:** A measurement instrument satisfies the structural aspect of construct validity when the internal organisation it implies matches the internal organisation of the construct (Messick, 1995). This test assesses whether the model's internal distance metric reflects the structure of the expert-curated thesaurus graph.
 
 **Expert Reference:** The `shortest_path` column encodes the graph distance (minimum number of edges) between two terms in the APA or ELSST thesaurus graph. A distance of 1 means direct synonymy/relationship; larger values indicate more distal conceptual relationships.
 
-**Model Distance Metrics:**
+**Model Distance (binary for all three techniques):**
 
-- **For clustering and seeded clustering:** A binary same-cluster indicator is derived:
-  $$d_{\text{model}}(i,j) = \mathbb{1}[c_i = c_j \text{ and } c_i \neq -1]$$
-  (1 = same cluster = predicted synonym, 0 = different cluster)
+For each pair of terms, the model distance is derived from the technique's final output — cluster co-membership for clustering and seeded clustering, and the thresholded pair decision for pairwise:
 
-- **For pairwise:**
-  - **Binary same-cluster indicator:** $d_{\text{binary}} = \hat{y}_{ij}$ (1 = predicted synonym, 0 = not).
-  - **Cosine distance:** $d_{\text{cosine}} = 1 - \text{sim}(t_i, t_j)$, a continuous measure (correlated with the raw expert distance, since both are distances).
+$$d_{\text{model}}(i,j) = \mathbb{1}[\hat{y}_{ij} = 1]$$
 
-**Expert proximity** is defined as $p_{\text{expert}} = \max(\text{shortest\_path}) - \text{shortest\_path}$, so that higher proximity = closer in the reference graph. All three correlations below are computed against expert proximity for the binary same-cluster indicator. Under this convention, **positive r = agreement** with the expert ontology.
+(0 = same predicted concept, 1 = different)
 
-**Three Correlation Coefficients:**
+**Expert proximity** is defined as $p_{\text{expert}} = \max(\text{shortest\_path}) - \text{shortest\_path}$, so that higher proximity = closer in the reference graph. Under this convention, **positive r = agreement** with the expert ontology.
+
+**Two Correlation Coefficients:**
 
 | Coefficient | Formula | Use Case |
 |-------------|---------|----------|
 | **Spearman ρ** | Rank correlation of $(p_{\text{expert}}, d_{\text{model}})$ | Robust to non-linear monotonic relationships; does not assume normality |
-| **Pearson r** | Linear correlation of $(p_{\text{expert}}, d_{\text{model}})$ | Standard linear association; sensitive to outliers |
-| **Point-biserial r** | Point-biserial correlation (`scipy.stats.pointbiserialr`) between the binary same-cluster indicator and continuous expert proximity | Correct effect size for a genuine binary dichotomy; equivalent to Pearson r on (binary, continuous). Note: the prior "biserial r" formulation assumed a latent normal continuous and is replaced here. |
+| **Point-biserial r** | Point-biserial correlation (`scipy.stats.pointbiserialr`) between the binary same-cluster indicator and continuous expert proximity | Matched effect size for a genuine binary dichotomy paired with a continuous variable |
 
-A **point-biserial r closer to +1** indicates that pairs classified as same-cluster (predicted synonyms) genuinely have short expert graph distances, while pairs in different clusters correspond to large expert distances.
-
-For cosine distance (a continuous metric), Spearman ρ and Pearson r are computed against the raw expert distance $d_{\text{expert}}$ — both are distances, so a positive correlation again indicates agreement.
+A **point-biserial r closer to +1** indicates that pairs classified as same-cluster (predicted synonyms) genuinely have short expert graph distances, while pairs in different clusters correspond to large expert distances. Larger absolute values of Spearman ρ indicate stronger monotonic structural alignment.
 
 ---
 
@@ -328,7 +323,7 @@ All stochastic operations use a fixed global seed (`SEED = 42`), including:
 - UMAP dimensionality reduction.
 - HDBSCAN (stochastic aspects).
 - Seeded clustering's random seed sampling.
-- Noise injection in Audit 1 (seeds are offset by run index and noise level to ensure non-overlapping random states).
+- Noise injection in the Embedding stability test (seeds are offset by run index and noise level to ensure non-overlapping random states).
 
 ### Computational Flow
 
@@ -352,7 +347,7 @@ unique_terms
                     │                           │
                     └──────────────────────────►│
                                                 ▼
-                                    Audits 1–5 (per model × technique)
+                              Diagnostic tests 1–5 (per model × technique)
 ```
 
 ### Key Software Dependencies
@@ -363,7 +358,7 @@ unique_terms
 | `torch` | Tensor operations, GPU acceleration |
 | `umap-learn` | UMAP dimensionality reduction |
 | `hdbscan` | Density-based clustering |
-| `wordfreq` | Zipf word frequency lookups (Audit 3) |
+| `wordfreq` | Zipf word frequency lookups (Rare-word bias test) |
 | `sklearn` | L2 normalisation, evaluation metrics |
 | `numpy` | Array operations, ICC computation |
 | `scipy` | Statistical correlations |
@@ -455,7 +450,7 @@ All models degrade on APA. The MPNet models are robust (F1 drop ≈ 0.10); BERT 
 
 ---
 
-### 7.4 Audit 1 — Reliability Results
+### 7.4 Embedding stability test — Results
 
 For each model, the technique is repeated k = 5 times at five noise levels. The table reports mean F1 and SEM. Lower SEM = more stable model.
 
@@ -517,7 +512,7 @@ For each model, the technique is repeated k = 5 times at five noise levels. The 
 
 ---
 
-### 7.5 Audit 2 — Discriminant Validity Results
+### 7.5 Lexical trap test — Results
 
 FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower FPR is better on hard negatives.
 
@@ -559,7 +554,7 @@ FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower 
 
 ---
 
-### 7.6 Audit 3 — Differential Item Functioning (Rare-Word Bias)
+### 7.6 Rare-word bias test — Results
 
 ΔRecall = Recall(Common) − Recall(Rare). Positive values indicate bias against rare terms. Retention Rate = Recall(Rare) / Recall(Common) — closer to 1.0 = less bias. N = 156 common / 156 rare pairs (ELSST); 565 common / 567 rare pairs (APA).
 
@@ -601,7 +596,7 @@ FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower 
 
 ---
 
-### 7.7 Audit 4 — Semantic Decay Results
+### 7.7 Semantic decay test — Results
 
 ΔRecall = Recall(Hard) − Recall(Easy). All values are negative. Retention Rate = Recall(Hard) / Recall(Easy) — closer to 1.0 = less semantic decay. N easy = 152 / N hard = 517 (ELSST); N easy = 1,086 / N hard = 1,447 (APA).
 
@@ -643,71 +638,53 @@ FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower 
 
 ---
 
-### 7.8 Audit 5 — Structural Validity Results
+### 7.8 Structural alignment test — Results
 
-Correlation between the model's same-cluster indicator and **expert proximity** ($\max(\text{shortest\_path}) - \text{shortest\_path}$). Pairs with valid `shortest_path`: 241,280 (ELSST) and 15,387,276 (APA). For binary distances: larger **positive** point-biserial r is better. For cosine distance (correlated with raw expert distance): larger **positive** Spearman ρ is better. The tables below are populated automatically by the audit notebooks; the values shown here are illustrative — refer to `analysis/results/{elsst,apa}/audit5_structural.csv` for the current numbers.
+Correlation between the model's same-cluster indicator (binary) and **expert proximity** ($\max(\text{shortest\_path}) - \text{shortest\_path}$). Pairs with valid `shortest_path`: 241,280 (ELSST) and 15,387,276 (APA). Larger absolute values indicate stronger structural alignment with the expert ontology. The tables below are populated automatically by the diagnostic notebooks; refer to `analysis/results/{elsst,apa}/structural_alignment.csv` for the current numbers.
 
-#### ELSST — Binary Distance (Clustering, Seeded, Pairwise)
+#### ELSST
 
-| Technique | Model | Spearman ρ | Pearson r | Point-biserial r |
-|-----------|-------|:----------:|:---------:|:----------:|
-| Clustering | All-MPNet-Base-v2 | −0.1042 | −0.1361 | **−0.7115** |
-| Clustering | MPNet-Personality | −0.1009 | −0.1318 | −0.6892 |
-| Clustering | SciBERT (SciVocab) | −0.0828 | −0.1064 | −0.6654 |
-| Clustering | BERT Base | −0.0778 | −0.0997 | −0.5915 |
-| Seeded | All-MPNet-Base-v2 | −0.0998 | −0.1308 | **−0.7212** |
-| Seeded | MPNet-Personality | −0.0923 | −0.1208 | −0.7087 |
-| Seeded | SciBERT (SciVocab) | −0.0894 | −0.1060 | −0.4082 |
-| Seeded | BERT Base | −0.0678 | −0.0846 | −0.3663 |
-| Pairwise | All-MPNet-Base-v2 | −0.1027 | −0.1341 | **−0.7203** |
-| Pairwise | MPNet-Personality | −0.0995 | −0.1294 | −0.7108 |
-| Pairwise | SciBERT (SciVocab) | −0.0800 | −0.1013 | −0.6262 |
-| Pairwise | BERT Base | −0.0534 | −0.0680 | −0.4958 |
+| Technique | Model | Spearman ρ | Point-biserial r |
+|-----------|-------|:----------:|:----------------:|
+| Clustering | All-MPNet-Base-v2 | **0.1042** | **0.1361** |
+| Clustering | MPNet-Personality | 0.1009 | 0.1318 |
+| Clustering | SciBERT (SciVocab) | 0.0828 | 0.1064 |
+| Clustering | BERT Base | 0.0778 | 0.0997 |
+| Seeded | All-MPNet-Base-v2 | **0.0998** | **0.1308** |
+| Seeded | MPNet-Personality | 0.0923 | 0.1208 |
+| Seeded | SciBERT (SciVocab) | 0.0894 | 0.1060 |
+| Seeded | BERT Base | 0.0678 | 0.0846 |
+| Pairwise | All-MPNet-Base-v2 | **0.1027** | **0.1341** |
+| Pairwise | MPNet-Personality | 0.0995 | 0.1294 |
+| Pairwise | SciBERT (SciVocab) | 0.0800 | 0.1013 |
+| Pairwise | BERT Base | 0.0534 | 0.0680 |
 
-#### ELSST — Cosine Distance (Pairwise only, continuous)
+#### APA
 
-| Model | Spearman ρ | Pearson r |
-|-------|:----------:|:---------:|
-| All-MPNet-Base-v2 | **0.2388** | **0.2991** |
-| MPNet-Personality | 0.1504 | 0.2463 |
-| SciBERT (SciVocab) | 0.1653 | 0.1867 |
-| BERT Base | 0.1688 | 0.1905 |
+| Technique | Model | Spearman ρ | Point-biserial r |
+|-----------|-------|:----------:|:----------------:|
+| Clustering | All-MPNet-Base-v2 | **0.0235** | **0.0431** |
+| Clustering | MPNet-Personality | 0.0223 | 0.0415 |
+| Clustering | SciBERT (SciVocab) | 0.0215 | 0.0351 |
+| Clustering | BERT Base | 0.0200 | 0.0327 |
+| Seeded | All-MPNet-Base-v2 | **0.0297** | **0.0489** |
+| Seeded | MPNet-Personality | 0.0220 | 0.0399 |
+| Seeded | SciBERT (SciVocab) | 0.0566 | 0.0659 |
+| Seeded | BERT Base | 0.0319 | 0.0378 |
+| Pairwise | All-MPNet-Base-v2 | **0.0294** | **0.0508** |
+| Pairwise | MPNet-Personality | 0.0254 | 0.0454 |
+| Pairwise | SciBERT (SciVocab) | 0.0271 | 0.0386 |
+| Pairwise | BERT Base | 0.0188 | 0.0245 |
 
-#### APA — Binary Distance (Clustering, Seeded, Pairwise)
-
-| Technique | Model | Spearman ρ | Pearson r | Point-biserial r |
-|-----------|-------|:----------:|:---------:|:----------:|
-| Clustering | All-MPNet-Base-v2 | −0.0235 | −0.0431 | **−0.7408** |
-| Clustering | MPNet-Personality | −0.0223 | −0.0415 | −0.7192 |
-| Clustering | SciBERT (SciVocab) | −0.0215 | −0.0351 | −0.6368 |
-| Clustering | BERT Base | −0.0200 | −0.0327 | −0.6130 |
-| Seeded | All-MPNet-Base-v2 | −0.0297 | −0.0489 | −0.6440 |
-| Seeded | MPNet-Personality | −0.0220 | −0.0399 | −0.6430 |
-| Seeded | SciBERT (SciVocab) | −0.0566 | −0.0659 | −0.2841 |
-| Seeded | BERT Base | −0.0319 | −0.0378 | −0.2010 |
-| Pairwise | All-MPNet-Base-v2 | −0.0294 | −0.0508 | −0.6863 |
-| Pairwise | MPNet-Personality | −0.0254 | −0.0454 | **−0.6741** |
-| Pairwise | SciBERT (SciVocab) | −0.0271 | −0.0386 | −0.4296 |
-| Pairwise | BERT Base | −0.0188 | −0.0245 | −0.2740 |
-
-#### APA — Cosine Distance (Pairwise only, continuous)
-
-| Model | Spearman ρ | Pearson r |
-|-------|:----------:|:---------:|
-| BERT Base | **0.2902** | **0.2967** |
-| All-MPNet-Base-v2 | 0.2629 | 0.2902 |
-| SciBERT (SciVocab) | 0.1868 | 0.1927 |
-| MPNet-Personality | 0.1712 | 0.2110 |
-
-**Key observations:** Spearman ρ and Pearson r for the binary same-cluster indicator are small in magnitude (~0.02 to 0.14) because the binary prediction is an extremely coarse compression of a continuous structural signal. Point-biserial r is equivalent to Pearson r in this configuration and is reported as the matched effect size for a genuine dichotomy. Despite the small magnitudes, the direction is consistent across all models and datasets: pairs predicted as same-cluster have meaningfully shorter expert graph distances. Notably, on APA cosine distance, BERT Base achieves the highest Spearman ρ (≈ 0.29) — not because BERT is semantically superior, but because its more diffuse similarity distribution happens to correlate well with multi-hop graph distances across the larger APA vocabulary.
+**Key observations:** All correlations are positive, confirming that pairs predicted as same-cluster genuinely have shorter expert graph distances. Magnitudes are small in absolute terms (Spearman ρ ≈ 0.02–0.10; point-biserial r ≈ 0.03–0.14) because the binary prediction is an extremely coarse compression of a continuous structural signal — a same-cluster decision collapses every shortest-path distance > 1 into a single category. Point-biserial r consistently exceeds Spearman ρ for the binary indicator, reflecting its parametric efficiency on a binary-vs-continuous pairing. Within each dataset the model ordering is stable across the three techniques, with All-MPNet-Base-v2 leading and BERT Base trailing.
 
 ---
 
 ## 8. Design Decisions and Limitations
 
 - **Negative pair construction:** The negative pairs are sampled from the thesaurus graph, meaning they represent terms that co-exist in the same domain but are not designated as related. This is a harder task than random negative sampling and better reflects the realistic challenge of harmonisation.
-- **Seeded clustering sensitivity:** The seeded technique is more sensitive to both hyperparameter choice and embedding stability than the other two techniques, as evidenced by higher SEM values in Audit 1. SciBERT and BERT under seeded clustering show very low F1 on APA (< 0.04), suggesting the technique requires high-quality semantic embeddings to work.
-- **Structural validity interpretation:** All Audit 5 correlations are reported on the convention "positive r = agreement with the expert ontology", with the binary same-cluster indicator correlated against expert proximity. Point-biserial r is the appropriate matched effect size for the genuine dichotomy and replaces the earlier biserial-r reporting, whose latent-normal-continuous assumption is violated by the binary indicator and which produced inflated magnitudes under heavy class imbalance.
+- **Seeded clustering sensitivity:** The seeded technique is more sensitive to both hyperparameter choice and embedding stability than the other two techniques, as evidenced by higher SEM values in the Embedding stability test. SciBERT and BERT under seeded clustering show very low F1 on APA (< 0.04), suggesting the technique requires high-quality semantic embeddings to work.
+- **Structural alignment interpretation:** Structural alignment correlations are reported on the convention "positive r = agreement with the expert ontology", with the binary same-cluster indicator correlated against expert proximity. Point-biserial r is the appropriate matched effect size for the genuine dichotomy; Spearman ρ provides a complementary rank-based view.
 - **No GPU used in reported runs:** All models were evaluated on CPU (PyTorch 2.9.1+cpu, CUDA = False), which affects inference speed but not correctness or reproducibility.
 
 ---

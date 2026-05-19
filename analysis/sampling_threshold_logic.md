@@ -6,7 +6,7 @@
 **Justification:**
 
 * 
-**Theoretical:** This metric aligns with the "Discriminant Validity" audit, which specifically aims to distinguish "Method (spelling)" from "Trait (meaning)".
+**Theoretical:** This metric aligns with the **Lexical trap test**, which specifically aims to distinguish surface form (spelling) from conceptual content (meaning).
 
 
 * 
@@ -20,13 +20,13 @@ The following thresholds classify the dataset into four distinct audit sets. The
 
 | Category | Type | Threshold (3-gram) | Sample Count () | Definition & Purpose |
 | --- | --- | --- | --- | --- |
-| **Hard Positives** | Synonyms | **Exactly 0.00** | ~517 | <br>**Semantic Gap Test:** Pairs with identical meaning but *zero* shared character sequences (e.g., "Debts" vs "Arrears"). Tests deep semantic encoding.
+| **Hard Positives** | Synonyms | **Exactly 0.00** | ~517 | <br>**Semantic decay test:** Pairs with identical meaning but *zero* shared character sequences (e.g., "Debts" vs "Arrears"). Tests deep semantic encoding.
 
  |
-| **Easy Positives** | Synonyms | **> 0.50** | 152 | **Lexical Anchors:** Synonyms with high orthographic overlap. Serves as the control group for the "Semantic Decay" audit.
+| **Easy Positives** | Synonyms | **> 0.50** | 152 | **Lexical Anchors:** Synonyms with high orthographic overlap. Serves as the control group for the Semantic decay test.
 
  |
-| **Hard Negatives** | Unrelated | **> 0.50*** | 65 | **Discriminant Validity (Traps):** Unrelated concepts that look similar. *Note: Threshold adjusted from >0.6 to >0.5 to ensure statistical power ()*.
+| **Hard Negatives** | Unrelated | **> 0.50*** | 65 | **Lexical trap test (traps):** Unrelated concepts that look similar. *Note: Threshold adjusted from >0.6 to >0.5 to ensure statistical power ()*.
 
  |
 | **Easy Negatives** | Unrelated | **< 0.10** | ~511k | **Baseline Noise:** Distinct concepts with little to no spelling overlap. The model should easily distinguish these.
@@ -38,7 +38,7 @@ The following thresholds classify the dataset into four distinct audit sets. The
 ### Hard Negatives (> 0.50)
 
 * 
-**Protocol:** The study defines these as "Lexical Traps" or "False Positives" to measure Discriminant Validity.
+**Protocol:** The study defines these as "Lexical Traps" or "False Positives" for the Lexical trap test.
 
 
 * 
@@ -49,7 +49,7 @@ The following thresholds classify the dataset into four distinct audit sets. The
 ### Hard Positives (= 0.00)
 
 * 
-**Protocol:** The "Semantic Decay" audit requires measuring performance as lexical overlap vanishes ().
+**Protocol:** The Semantic decay test requires measuring performance as lexical overlap vanishes ().
 
 
 * **Validation:** 33.2% of the positive pairs in the dataset have a similarity of exactly 0.00. This provides a massive sample size (~517), allowing for a strict "Zero-Overlap" condition without needing to relax the threshold to <0.1.
@@ -61,3 +61,14 @@ The following thresholds classify the dataset into four distinct audit sets. The
 
 
 * **Validation:** This captures the top 9.8% of the distribution, creating a valid "High Similarity" control group.
+
+---
+
+## 4. Diagnostic Test Mapping
+
+| Subset | Used by diagnostic test |
+| --- | --- |
+| Hard Negatives (Jaccard > 0.5) | Lexical trap test |
+| Easy Negatives (Jaccard = 0.0) | Lexical trap test (baseline) |
+| Hard Positives (Jaccard = 0.0) | Semantic decay test |
+| Easy Positives (Jaccard > 0.5) | Semantic decay test (baseline) |

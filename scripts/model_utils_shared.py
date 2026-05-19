@@ -10,7 +10,7 @@ Provides:
 - Embedding computation and caching
 - Evaluation metrics (precision, recall, F1, confusion matrix)
 - Correlation helpers (Spearman, Pearson, Point-Biserial)
-- Graph / Union-Find utilities for structural validity
+- Graph / Union-Find utilities for the Structural alignment test
 """
 
 import re
@@ -511,7 +511,7 @@ def model_graph_shortest_paths(n_nodes, edges_idx1, edges_idx2,
 
 
 # ==========================================================================
-#  ICC / Reliability Helpers
+#  ICC Helpers (Embedding stability test)
 # ==========================================================================
 
 def compute_icc_oneway(sum_y, sum_y2, n_targets, k_raters):
