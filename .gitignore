@@ -1,5 +1,5 @@
 logs/
-datasets/raw_datasets/APA.xml
+datasets/raw_datasets/APA*.xml
 datasets/processed_datasets/
 taxonomy-dashboard/
 tests/
@@ -10,3 +10,9 @@ reports/
 reports2/
 html_to_pdf.py
 draft_third_paper.docx
+
+# Local assistant files (never commit)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+writings/
