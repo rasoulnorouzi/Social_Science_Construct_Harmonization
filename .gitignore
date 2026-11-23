@@ -16,3 +16,4 @@ CLAUDE.md
 CLAUDE.local.md
 .claude/
 writings/
+__pycache__/
