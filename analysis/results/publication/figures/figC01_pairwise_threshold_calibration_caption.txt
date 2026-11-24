@@ -1,1 +1,0 @@
-Calibration Figure C1. Pairwise threshold sweep on ELSST training data. Left: F1 vs threshold for each model. Right: best threshold and best mean F1 per model. X markers indicate calibrated thresholds carried into the audit stage when available.

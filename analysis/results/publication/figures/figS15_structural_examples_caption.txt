@@ -1,1 +1,0 @@
-Figure S15. Example structural pairs plotted by expert shortest-path distance and colored by cosine similarity.

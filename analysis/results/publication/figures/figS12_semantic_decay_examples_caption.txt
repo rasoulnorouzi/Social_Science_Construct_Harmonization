@@ -1,1 +1,0 @@
-Figure S12. Example hard-positive pairs missed/caught; rows near calibrated pairwise threshold (±0.05) are flagged when cosine_sim is available.

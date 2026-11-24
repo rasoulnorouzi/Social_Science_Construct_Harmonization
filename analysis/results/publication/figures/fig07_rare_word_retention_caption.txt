@@ -1,1 +1,0 @@
-Figure 7. Rare-word retention by model and technique. Dagger marks bars with high retention but low common-word recall.

@@ -34,7 +34,7 @@ To reproduce the APA analyses, place the APA Zthes export at `datasets/raw_datas
    - Broader/narrower pairs (a concept with each of its ancestors) are written to a separate file and are not part of the benchmark.
 3. **Calibrate (ELSST train split only):** run `analysis/pairwise_analysis.ipynb` (models and character 3-gram baseline), `analysis/clustering_analysis.ipynb` and `analysis/seed_clustering_analysis.ipynb`. Each notebook prints the selected values as a block to paste into `scripts/config.py` (`BEST_PAIRWISE_THRESHOLDS`, `BEST_NGRAM_THRESHOLD`, `BEST_CLUSTERING_PARAMS`, `BEST_SEEDED_PARAMS`).
 4. **Evaluate and run diagnostics with the frozen settings:** run `analysis/elsst_diagnostic_analysis.ipynb` (ELSST test split) and `analysis/apa_diagnostic_analysis.ipynb` (full APA thesaurus). Both notebooks first check that `config.py` matches the calibration results. Outputs go to `analysis/results/{elsst,apa}/`. Set `FAST_DEBUG = True` in the configuration cell for a quick test run on a sample (not valid results).
-5. **Figures:** `analysis/publication_figures.ipynb` writes `analysis/results/publication/figures/`.
+5. **Tables:** `analysis/paper_tables.ipynb` reads the result CSVs of both diagnostic notebooks and writes every main-text and supplementary table of the paper to `analysis/results/paper/` (CSV and LaTeX).
 
 **Device:** `scripts/config.py` uses the GPU when one is available (`HARMONIZATION_DEVICE=cpu` forces the CPU). The GPU only encodes the terms; similarity matrices, clustering, metrics and the bootstrap run on the CPU, so results do not depend on the device beyond the rounding of the encoder. The APA notebook holds about 60 million pairs in memory; use a runtime with at least 12 GB RAM (high-RAM on Colab).
 

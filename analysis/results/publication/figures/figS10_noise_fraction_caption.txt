@@ -1,1 +1,0 @@
-Figure S10. Fraction of terms assigned to noise clusters by model.

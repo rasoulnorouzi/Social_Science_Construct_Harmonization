@@ -1,1 +1,0 @@
-Figure 6. Semantic Decay. Recall on easy positives (Jaccard > 0.5) versus hard positives (Jaccard = 0.0) for each model-technique combination on ELSST (left) and APA (right). Recall collapses toward zero for all models when surface cues are removed, confirming that aggregate performance is driven by lexically transparent pairs.

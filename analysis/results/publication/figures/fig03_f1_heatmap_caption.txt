@@ -1,1 +1,0 @@
-Figure 3. Heatmap of F1 scores by model (rows) and dataset-technique combinations (columns). Highest value in each column is bolded.
