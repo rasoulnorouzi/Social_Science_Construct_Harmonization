@@ -5,31 +5,34 @@ Shared utilities for Social Science Concept Integration benchmarking.
 
 Provides:
 - Reproducibility setup
-- Data loading and preparation
+- Data loading (pair files with integer term ids)
 - Model loading (SentenceTransformer / token-level with mean pooling)
-- Embedding computation and caching
-- Evaluation metrics (precision, recall, F1, confusion matrix)
-- Correlation helpers (Spearman, Pearson, Point-Biserial)
-- Graph / Union-Find utilities for the Structural alignment test
+- Embedding computation, cosine and character n-gram similarity matrices
+- Evaluation metrics (precision, recall, F1, FPR) from confusion counts
+- Concept-level bootstrap, top-k recall, correct matches per reviewed candidates
+
+Pairs are handled as integer arrays (idx1, idx2 = row numbers in the term list),
+because APA has about 60 million negative pairs. Metrics are computed from
+confusion counts with numpy (same values as sklearn).
 """
 
 import re
 import random
-from collections import defaultdict, deque
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
+import scipy.sparse as sp
+import pyarrow as pa
+import pyarrow.parquet as pq
 from sentence_transformers import SentenceTransformer, models
-from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.preprocessing import normalize
 
 # Optional imports with graceful fallback
 try:
-    from scipy.stats import spearmanr, pearsonr, pointbiserialr
+    from scipy.stats import spearmanr
 except ImportError:
-    spearmanr = pearsonr = pointbiserialr = None
+    spearmanr = None
 
 try:
     from wordfreq import zipf_frequency
@@ -55,89 +58,85 @@ def setup_reproducibility(seed=42):
 #  Data Loading
 # ==========================================================================
 
-def load_and_prepare_data(pos_path, neg_path, seed=42, balance=False):
+PAIR_COLUMNS = ["idx1", "idx2", "concept1", "concept2", "label", "shortest_path", "pair_type"]
+PAIR_TYPE_NAMES = ["pref_pref", "pref_alt", "alt_alt"]
+
+
+def _read_column(path, column):
+    """One column of a Parquet file as a numpy array (read column by column to save memory)."""
+    return pq.read_table(path, columns=[column]).column(column).to_numpy()
+
+
+def load_pair_data(folder, prefix):
     """
-    Load positive and negative pair CSVs and return a shuffled DataFrame.
+    Load one data set written by scripts/process_dataset.py.
 
-    Args:
-        pos_path:  Path to positive pairs CSV.
-        neg_path:  Path to negative pairs CSV.
-        seed:      Random seed for reproducible shuffling.
-        balance:   If True, down-sample negatives to match positives.
-
-    Returns:
-        pd.DataFrame with columns [term1, term2, label, ...].
+    Returns a dict with:
+        terms      – list of term strings; idx1 / idx2 point into this list
+        idx1, idx2 – int32 arrays, the two terms of every pair
+        concept1, concept2 – int32 arrays, the concepts of the two terms
+        label      – int8 array, 1 = synonyms (positive pair), 0 = negative pair
+        shortest_path – int16 array, concept distance in the thesaurus graph (-1 = not connected)
+        pair_type  – int8 array, 0 = pref-pref, 1 = pref-entry term, 2 = entry-entry term
+        n_pos      – number of positive pairs; positives come first, then negatives
+        hierarchy  – dict with idx1, idx2, concept1, concept2, depth, pair_type of the
+                     broader/narrower pairs (not part of the benchmark)
     """
-    print("Loading datasets...")
-    try:
-        pos_df = pd.read_csv(pos_path, on_bad_lines='skip')
-        neg_df = pd.read_csv(neg_path, on_bad_lines='skip')
-    except Exception as e:
-        print(f"Error loading files: {e}")
-        raise e
+    folder = str(folder)
+    print(f"Loading pair data from {folder} (prefix '{prefix}')...")
+    pos_path = f"{folder}/{prefix}positive_pairs.parquet"
+    neg_path = f"{folder}/{prefix}negative_pairs.parquet"
+    hier_path = f"{folder}/{prefix}hierarchy_pairs.parquet"
 
-    print(f"Positive samples: {len(pos_df)}")
-    print(f"Negative samples (total): {len(neg_df)}")
+    terms = pd.read_parquet(f"{folder}/{prefix}terms.parquet")["term"].tolist()
+    data = {"terms": terms}
+    for col in PAIR_COLUMNS:
+        data[col] = np.concatenate([_read_column(pos_path, col), _read_column(neg_path, col)])
+    data["n_pos"] = int(pq.read_metadata(pos_path).num_rows)
 
-    if balance:
-        n_pos = len(pos_df)
-        if len(neg_df) > n_pos:
-            neg_df_sampled = neg_df.sample(n=n_pos, random_state=seed)
-        else:
-            neg_df_sampled = neg_df
-        print(f"Negative samples (sampled): {len(neg_df_sampled)}")
-    else:
-        neg_df_sampled = neg_df
-        print(f"Negative samples (used as is): {len(neg_df_sampled)}")
+    hier_columns = pq.read_schema(hier_path).names
+    data["hierarchy"] = {col: _read_column(hier_path, col) for col in hier_columns}
+    pa.default_memory_pool().release_unused()
 
-    df = pd.concat([pos_df, neg_df_sampled])
-    df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
-
-    df['term1'] = df['term1'].astype(str)
-    df['term2'] = df['term2'].astype(str)
-    return df
+    print(f"  terms: {len(terms):,} | positive pairs: {data['n_pos']:,} | "
+          f"negative pairs: {len(data['label']) - data['n_pos']:,} | "
+          f"broader/narrower pairs: {len(data['hierarchy']['idx1']):,}")
+    return data
 
 
-def load_test_data(pos_path, neg_path):
+def subsample_negatives(data, n_negatives, seed=42):
     """
-    Load test datasets keeping positives and negatives separable.
-
-    Returns:
-        (pos_df, neg_df, full_df)  — full_df = concat(pos_df, neg_df).
+    Quick test only (FAST_DEBUG switch in the notebooks): keep all
+    positives and a random sample of negatives. Never used for reported results.
     """
-    print("Loading test datasets...")
-    pos_df = pd.read_csv(pos_path, on_bad_lines="skip")
-    neg_df = pd.read_csv(neg_path, on_bad_lines="skip")
-
-    if "label" not in pos_df.columns:
-        pos_df["label"] = 1
-    if "label" not in neg_df.columns:
-        neg_df["label"] = 0
-
-    for col in ("term1", "term2"):
-        pos_df[col] = pos_df[col].astype(str)
-        neg_df[col] = neg_df[col].astype(str)
-
-    full_df = pd.concat([pos_df, neg_df], ignore_index=True)
-    return pos_df, neg_df, full_df
+    rng = np.random.default_rng(seed)
+    n_pos = data["n_pos"]
+    n_neg = len(data["label"]) - n_pos
+    keep_neg = np.sort(rng.choice(n_neg, size=min(n_negatives, n_neg), replace=False)) + n_pos
+    keep = np.concatenate([np.arange(n_pos), keep_neg])
+    for col in PAIR_COLUMNS:
+        data[col] = data[col][keep]
+    print(f"  FAST_DEBUG: kept {n_pos:,} positives and {len(keep_neg):,} negatives")
+    return data
 
 
 # ==========================================================================
 #  Model Loading
 # ==========================================================================
 
-def load_model(model_name, model_type='sentence_transformer'):
+def load_model(model_name, model_type='sentence_transformer', device='cpu'):
     """
     Load a Sentence Transformer model based on its type.
 
     Args:
         model_name:  HuggingFace model name or local path.
         model_type:  'sentence_transformer' or 'token_embedding_mean_pool'.
+        device:      'cuda' or 'cpu' (config.DEVICE).
 
     Returns:
         SentenceTransformer instance, or None on failure.
     """
-    print(f"Loading Model ({model_name})...")
+    print(f"Loading Model ({model_name}) on {device}...")
     try:
         if model_type == 'token_embedding_mean_pool':
             word_embedding_model = models.Transformer(
@@ -148,12 +147,13 @@ def load_model(model_name, model_type='sentence_transformer'):
                 pooling_mode='mean',
             )
             model = SentenceTransformer(
-                modules=[word_embedding_model, pooling_model]
+                modules=[word_embedding_model, pooling_model], device=device
             )
         else:
             model = SentenceTransformer(
-                model_name, model_kwargs={'local_files_only': False}
+                model_name, model_kwargs={'local_files_only': False}, device=device
             )
+        model.eval()
         return model
     except Exception as e:
         print(f"Failed to load {model_name}: {e}")
@@ -167,6 +167,7 @@ def load_model(model_name, model_type='sentence_transformer'):
 def build_embeddings(model, terms, batch_size=16):
     """
     Encode a list of terms and return a dict with multiple representations.
+    All returned arrays live on the CPU.
 
     Returns dict with keys:
         raw_t     – torch.Tensor (unnormalised)
@@ -176,16 +177,17 @@ def build_embeddings(model, terms, batch_size=16):
         sigma     – np.ndarray   (per-dimension std of raw embeddings)
     """
     print(f"  Encoding {len(terms)} unique terms...")
-    raw_t = model.encode(
-        list(terms), convert_to_tensor=True,
-        show_progress_bar=True, batch_size=batch_size,
-    )
-    raw_t = raw_t.cpu()
+    with torch.no_grad():
+        raw_t = model.encode(
+            list(terms), convert_to_tensor=True,
+            show_progress_bar=True, batch_size=batch_size,
+        )
+    raw_t = raw_t.float().cpu()
     raw_np = raw_t.numpy()
 
     norm_np = normalize(raw_np, norm="l2", axis=1)
     norm_np = np.ascontiguousarray(norm_np, dtype=np.float64)
-    norm_t = F.normalize(raw_t, p=2, dim=1)
+    norm_t = torch.nn.functional.normalize(raw_t, p=2, dim=1)
 
     sigma = raw_np.std(axis=0, ddof=0)
 
@@ -198,27 +200,85 @@ def build_embeddings(model, terms, batch_size=16):
     }
 
 
+def cosine_matrix(norm_np):
+    """
+    Cosine similarity of every term with every term (CPU, float32).
+    The input must be L2-normalised. For APA (11,014 terms) this is about 0.5 GB.
+    """
+    x = np.ascontiguousarray(norm_np, dtype=np.float32)
+    return x @ x.T
+
+
+def pair_values(matrix, idx1, idx2, chunk=5_000_000):
+    """Look up one value per pair in a term x term matrix (in chunks to save memory)."""
+    out = np.empty(len(idx1), dtype=matrix.dtype)
+    for start in range(0, len(idx1), chunk):
+        end = start + chunk
+        out[start:end] = matrix[idx1[start:end], idx2[start:end]]
+    return out
+
+
+def above_threshold(scores, threshold):
+    """
+    Prediction = score > threshold, with the threshold in the same float type
+    as the scores. Character n-gram Jaccard values are exact fractions (for example 11/20 = 0.55);
+    comparing a float32 0.55 with the Python float 0.55 would wrongly count it as larger.
+    """
+    scores = np.asarray(scores)
+    return scores > np.asarray(threshold, dtype=scores.dtype)
+
+
+def same_cluster(cluster_labels, idx1, idx2, chunk=5_000_000):
+    """1 when both terms are in the same cluster (noise label -1 never matches)."""
+    cluster_labels = np.asarray(cluster_labels, dtype=np.int32)
+    out = np.empty(len(idx1), dtype=np.int8)
+    for start in range(0, len(idx1), chunk):
+        end = start + chunk
+        c1 = cluster_labels[idx1[start:end]]
+        c2 = cluster_labels[idx2[start:end]]
+        out[start:end] = (c1 == c2) & (c1 != -1)
+    return out
+
+
 # ==========================================================================
 #  Evaluation Metrics
 # ==========================================================================
 
 def confusion_counts(y_true, y_pred):
     """Return (TP, FP, TN, FN)."""
-    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
-    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
-    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
-    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
-    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    y_true = np.asarray(y_true).astype(bool)
+    y_pred = np.asarray(y_pred).astype(bool)
+    tp = int(np.count_nonzero(y_true & y_pred))
+    fp = int(np.count_nonzero(~y_true & y_pred))
+    fn = int(np.count_nonzero(y_true & ~y_pred))
+    tn = int(len(y_true) - tp - fp - fn)
     return tp, fp, tn, fn
+
+
+def metrics_from_counts(tp, fp, tn, fn):
+    """
+    Precision, recall, F1, false-positive rate and MCC from confusion
+    counts. Same definitions as sklearn (0 when a denominator is 0).
+    """
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    denom = np.sqrt(float(tp + fp) * float(tp + fn) * float(tn + fp) * float(tn + fn))
+    mcc = (tp * tn - fp * fn) / denom if denom > 0 else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1, "fpr": fpr, "mcc": mcc,
+            "tp": tp, "fp": fp, "tn": tn, "fn": fn}
+
+
+def binary_metrics(y_true, y_pred):
+    """All metrics of one prediction vector (dict)."""
+    return metrics_from_counts(*confusion_counts(y_true, y_pred))
 
 
 def compute_metrics(y_true, y_pred):
     """Return (precision, recall, F1, TP, FP, TN, FN)."""
-    p = precision_score(y_true, y_pred, zero_division=0)
-    r = recall_score(y_true, y_pred, zero_division=0)
-    f = f1_score(y_true, y_pred, zero_division=0)
-    tp, fp, tn, fn = confusion_counts(y_true, y_pred)
-    return p, r, f, tp, fp, tn, fn
+    m = binary_metrics(y_true, y_pred)
+    return m["precision"], m["recall"], m["f1"], m["tp"], m["fp"], m["tn"], m["fn"]
 
 
 def recall_on_subset(y_true, y_pred, mask):
@@ -227,62 +287,72 @@ def recall_on_subset(y_true, y_pred, mask):
     y_pred = np.asarray(y_pred)[mask]
     if len(y_true) == 0:
         return 0.0
-    return recall_score(y_true, y_pred, zero_division=0)
+    return binary_metrics(y_true, y_pred)["recall"]
 
 
 def compute_subset_metrics(y_true, y_pred, mask):
     """
-    Compute comprehensive metrics on a boolean-masked subset using sklearn.
-    
-    Args:
-        y_true: Ground truth labels (full array).
-        y_pred: Predicted labels (full array).
-        mask: Boolean mask indicating which samples to include.
-    
+    Compute metrics on a boolean-masked subset.
+
     Returns:
         dict with keys: precision, recall, f1, tp, fp, tn, fn, fpr, n_subset
     """
     y_true_sub = np.asarray(y_true)[mask]
     y_pred_sub = np.asarray(y_pred)[mask]
-    
     if len(y_true_sub) == 0:
-        return {
-            'precision': 0.0, 'recall': 0.0, 'f1': 0.0,
-            'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0,
-            'fpr': 0.0, 'n_subset': 0
-        }
-    
-    # Compute sklearn metrics
-    precision = precision_score(y_true_sub, y_pred_sub, zero_division=0)
-    recall = recall_score(y_true_sub, y_pred_sub, zero_division=0)
-    f1 = f1_score(y_true_sub, y_pred_sub, zero_division=0)
-    
-    # Compute confusion matrix elements
-    tp, fp, tn, fn = confusion_counts(y_true_sub, y_pred_sub)
-    
-    # Compute FPR (False Positive Rate)
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-    
-    return {
-        'precision': float(precision),
-        'recall': float(recall),
-        'f1': float(f1),
-        'tp': int(tp),
-        'fp': int(fp),
-        'tn': int(tn),
-        'fn': int(fn),
-        'fpr': float(fpr),
-        'n_subset': int(mask.sum())
-    }
+        return {'precision': 0.0, 'recall': 0.0, 'f1': 0.0,
+                'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'fpr': 0.0, 'n_subset': 0}
+    m = binary_metrics(y_true_sub, y_pred_sub)
+    return {'precision': float(m['precision']), 'recall': float(m['recall']), 'f1': float(m['f1']),
+            'tp': m['tp'], 'fp': m['fp'], 'tn': m['tn'], 'fn': m['fn'],
+            'fpr': float(m['fpr']), 'n_subset': int(np.sum(mask))}
+
+
+def f1_at_prevalence(recall, fpr, n_pos_ref, n_neg_ref):
+    """
+    F1 that a pipeline would reach on a data set
+    with n_pos_ref positives and n_neg_ref negatives, keeping its recall and its
+    false-positive rate fixed:
+        TP = recall * n_pos_ref,  FP = fpr * n_neg_ref,  precision = TP / (TP + FP)
+    """
+    tp = recall * n_pos_ref
+    fp = fpr * n_neg_ref
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    if precision + recall == 0:
+        return 0.0, precision
+    return 2 * precision * recall / (precision + recall), precision
+
+
+def threshold_curve(scores, labels, thresholds):
+    """
+    Precision and recall at a grid of thresholds (prediction = score > t).
+    Replaces the full precision-recall curve, which would have one row per pair.
+    """
+    pos = np.sort(scores[labels == 1])
+    neg = np.sort(scores[labels == 0])
+    tp = len(pos) - np.searchsorted(pos, thresholds, side="right")
+    fp = len(neg) - np.searchsorted(neg, thresholds, side="right")
+    precision = np.where(tp + fp > 0, tp / np.maximum(tp + fp, 1), 1.0)
+    recall = tp / max(len(pos), 1)
+    return pd.DataFrame({"threshold": thresholds, "precision": precision, "recall": recall,
+                         "tp": tp, "fp": fp})
 
 
 # ==========================================================================
-#  Correlation Helpers
+#  Correlation Helper
 # ==========================================================================
 
-def spearman_corr(x, y):
-    """Spearman rank correlation with NaN-safe fallback."""
-    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+def spearman_corr(x, y, max_n=None, seed=42):
+    """
+    Spearman rank correlation, ignoring NaN values.
+    With max_n, a fixed random sample of max_n pairs is used (saves memory on very large inputs).
+    """
+    x, y = np.asarray(x), np.asarray(y)
+    if max_n is not None and len(x) > max_n:
+        rng = np.random.default_rng(seed)
+        pick = np.sort(rng.choice(len(x), size=max_n, replace=False))
+        x, y = x[pick], y[pick]
+    x, y = x.astype(float), y.astype(float)
     mask = np.isfinite(x) & np.isfinite(y)
     if mask.sum() < 3:
         return np.nan
@@ -295,115 +365,6 @@ def spearman_corr(x, y):
     if xr.std() == 0 or yr.std() == 0:
         return np.nan
     return float(np.corrcoef(xr, yr)[0, 1])
-
-
-def pearson_corr(x, y):
-    """Pearson correlation with NaN-safe handling."""
-    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    if mask.sum() < 3:
-        return np.nan, np.nan
-    if pearsonr is not None:
-        r, p = pearsonr(x[mask], y[mask])
-        return float(r), float(p)
-    # Fallback
-    if np.std(x[mask]) == 0 or np.std(y[mask]) == 0:
-        return np.nan, np.nan
-    return float(np.corrcoef(x[mask], y[mask])[0, 1]), np.nan
-
-
-def biserial_corr(binary, continuous):
-    """
-    Biserial correlation between a binary variable and a continuous one.
-    Handles imbalanced binary data better than point-biserial.
-
-    Args:
-        binary:      array-like of 0/1 values (e.g. same-cluster indicator).
-        continuous:  array-like of continuous values (e.g. expert shortest path).
-
-    Returns:
-        r_b  or  NaN on failure.
-    """
-    import scipy.stats as stats
-    binary = np.asarray(binary, dtype=float)
-    continuous = np.asarray(continuous, dtype=float)
-    mask = np.isfinite(binary) & np.isfinite(continuous)
-    if mask.sum() < 3:
-        return np.nan
-    
-    b_valid = binary[mask]
-    c_valid = continuous[mask]
-    
-    # Ensure binary is 0 and 1
-    unique_vals = np.unique(b_valid)
-    if len(unique_vals) != 2:
-        return np.nan
-        
-    val0, val1 = unique_vals[0], unique_vals[1]
-    
-    group1 = c_valid[b_valid == val1]
-    group0 = c_valid[b_valid == val0]
-    
-    p = len(group1) / len(c_valid)
-    q = 1.0 - p
-    
-    if p == 0 or q == 0:
-        return np.nan
-        
-    mean1 = np.mean(group1)
-    mean0 = np.mean(group0)
-    sy = np.std(c_valid, ddof=1)
-    
-    if sy == 0:
-        return np.nan
-        
-    # Find the z-score that splits the normal distribution into p and q
-    # stats.norm.ppf(q) gives the z-value where the CDF is q
-    z = stats.norm.ppf(q)
-    
-    # Ordinate (height) of the standard normal distribution at z
-    y = stats.norm.pdf(z)
-    
-    if y == 0:
-        return np.nan
-        
-    rb = ((mean1 - mean0) / sy) * (p * q / y)
-    
-    # Biserial correlation can sometimes exceed 1 or -1 in extreme cases,
-    # but we return the calculated value.
-    return float(rb)
-
-
-def point_biserial_corr(binary, continuous):
-    """
-    Point-biserial correlation between a binary variable and a continuous one.
-    Correct for a genuine dichotomy (e.g. same-cluster indicator), unlike
-    `biserial_corr`, which assumes the binary variable is a dichotomization
-    of a latent normal continuous variable.
-
-    Equivalent to Pearson r computed on (binary, continuous).
-
-    Args:
-        binary:      array-like of 0/1 values (e.g. same-cluster indicator).
-        continuous:  array-like of continuous values (e.g. expert proximity).
-
-    Returns:
-        (r_pb, p_value)  or  (NaN, NaN) on failure.
-    """
-    from scipy.stats import pointbiserialr
-    b = np.asarray(binary, dtype=float)
-    c = np.asarray(continuous, dtype=float)
-    mask = np.isfinite(b) & np.isfinite(c)
-    if mask.sum() < 3:
-        return np.nan, np.nan
-    b, c = b[mask], c[mask]
-    if len(np.unique(b)) != 2 or np.std(c) == 0:
-        return np.nan, np.nan
-    try:
-        res = pointbiserialr(b, c)
-        return float(res.statistic), float(res.pvalue)
-    except Exception:
-        return np.nan, np.nan
 
 
 # ==========================================================================
@@ -435,98 +396,147 @@ def jaccard_sim(a_tokens, b_tokens):
     return len(inter) / len(union) if union else 0.0
 
 
-# ==========================================================================
-#  Graph / Union-Find Utilities  (Structural Validity)
-# ==========================================================================
-
-def union_find(n):
-    """Create a union-find (disjoint set) data structure of size n."""
-    parent = np.arange(n, dtype=np.int32)
-    rank = np.zeros(n, dtype=np.int8)
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra == rb:
-            return
-        if rank[ra] < rank[rb]:
-            parent[ra] = rb
-        elif rank[ra] > rank[rb]:
-            parent[rb] = ra
-        else:
-            parent[rb] = ra
-            rank[ra] += 1
-
-    return parent, find, union
-
-
-def model_graph_shortest_paths(n_nodes, edges_idx1, edges_idx2,
-                               query_idx1, query_idx2):
-    """BFS shortest paths on a graph built from predicted positive edges."""
-    adj = [set() for _ in range(n_nodes)]
-    for a, b in zip(edges_idx1, edges_idx2):
-        if a != b:
-            adj[a].add(b)
-            adj[b].add(a)
-
-    pairs_by_src = defaultdict(list)
-    for i, src in enumerate(query_idx1):
-        pairs_by_src[src].append(i)
-
-    distances = np.full(len(query_idx1), -1, dtype=np.int32)
-
-    for src, pair_indices in pairs_by_src.items():
-        target_to_indices = defaultdict(list)
-        for i in pair_indices:
-            target_to_indices[query_idx2[i]].append(i)
-        targets = set(target_to_indices.keys())
-
-        if src in targets:
-            for i in target_to_indices[src]:
-                distances[i] = 0
-            targets.discard(src)
-        if not targets:
-            continue
-
-        visited = {src}
-        q = deque([(src, 0)])
-        while q and targets:
-            node, dist = q.popleft()
-            for nbr in adj[node]:
-                if nbr in visited:
-                    continue
-                visited.add(nbr)
-                if nbr in targets:
-                    for i in target_to_indices[nbr]:
-                        distances[i] = dist + 1
-                    targets.discard(nbr)
-                q.append((nbr, dist + 1))
-
-    return distances
-
-
-# ==========================================================================
-#  ICC Helpers (Embedding stability test)
-# ==========================================================================
-
-def compute_icc_oneway(sum_y, sum_y2, n_targets, k_raters):
+def jaccard_matrix(terms, n=3):
     """
-    ICC(1,1): one-way random effects intraclass correlation.
-    Measures consistency of per-pair decisions across repeated runs.
+    Character n-gram Jaccard similarity of every term with every term
+    (dense float32). Same definition as jaccard_sim(letter_ngrams(a), letter_ngrams(b)),
+    computed with one sparse matrix product instead of a Python loop over all pairs.
+    Used for the lexical masks and for the character 3-gram baseline.
     """
-    if n_targets < 2 or k_raters < 2:
-        return 0.0
-    grand_mean = sum_y.sum() / (n_targets * k_raters)
-    mean_i = sum_y / k_raters
-    msr = k_raters * np.sum((mean_i - grand_mean) ** 2) / (n_targets - 1)
-    ss_within = np.sum(sum_y2 - k_raters * mean_i ** 2)
-    mse = ss_within / (n_targets * (k_raters - 1))
-    denom = msr + (k_raters - 1) * mse
-    if denom == 0:
-        return 0.0
-    return float((msr - mse) / denom)
+    vocab = {}
+    rows, cols = [], []
+    for i, t in enumerate(terms):
+        for gram in letter_ngrams(t, n):
+            if gram not in vocab:
+                vocab[gram] = len(vocab)
+            rows.append(i)
+            cols.append(vocab[gram])
+    x = sp.csr_matrix((np.ones(len(rows), dtype=np.float32), (rows, cols)),
+                      shape=(len(terms), len(vocab)))
+    sizes = np.asarray(x.sum(axis=1), dtype=np.float32).ravel()
+    jac = (x @ x.T).toarray().astype(np.float32)          # intersection sizes
+    union = sizes[:, None] + sizes[None, :] - jac
+    # Jaccard = intersection / union, written into the same array to save memory
+    np.divide(jac, union, out=jac, where=union > 0)
+    jac[union <= 0] = 0.0
+    return jac
+
+
+# ==========================================================================
+#  Concept-level bootstrap
+#  Pairs are not independent: one concept appears in thousands of pairs. We therefore
+#  resample CONCEPTS with replacement. A concept drawn k times counts k times, so a
+#  pair inside one concept (positive) gets weight k, and a pair of two different
+#  concepts gets weight k1 * k2. Precision, recall and F1 are recomputed from the
+#  weighted counts. Only true positives, false positives and false negatives are
+#  needed, so the 60 million correct rejections never enter the computation.
+#  The pipelines are kept fixed: the interval shows the uncertainty from which
+#  concepts happen to be in the test set, not from re-running the clustering.
+# ==========================================================================
+
+def bootstrap_weights(concept1, concept2, n_boot=1000, seed=42):
+    """
+    Draw the bootstrap samples once. Returns (concepts, W): the sorted concept ids of
+    the evaluation set and a (n_boot x n_concepts) matrix with how often each concept
+    was drawn in each bootstrap sample.
+    """
+    concepts = np.unique(np.concatenate([concept1, concept2]))
+    rng = np.random.default_rng(seed)
+    w = np.zeros((n_boot, len(concepts)), dtype=np.float32)
+    for b in range(n_boot):
+        draw = rng.integers(0, len(concepts), size=len(concepts))
+        w[b] = np.bincount(draw, minlength=len(concepts))
+    return concepts, w
+
+
+def bootstrap_weight_sum(w, col1, col2, chunk=5000):
+    """
+    Sum of the bootstrap weights of a set of pairs, one value per bootstrap sample.
+    col1 / col2 are column numbers in W (np.searchsorted(concepts, concept_ids)).
+    """
+    total = np.zeros(w.shape[0], dtype=np.float64)
+    for start in range(0, len(col1), chunk):
+        a = col1[start:start + chunk]
+        b = col2[start:start + chunk]
+        wa = w[:, a]
+        weight = np.where(a == b, wa, wa * w[:, b])
+        total += weight.sum(axis=1)
+    return total
+
+
+def bootstrap_prf(w, col1, col2, labels, preds):
+    """Precision, recall and F1 in every bootstrap sample (arrays of length n_boot)."""
+    labels = labels.astype(bool)
+    preds = preds.astype(bool)
+    tp_rows = np.flatnonzero(labels & preds)
+    fp_rows = np.flatnonzero(~labels & preds)
+    fn_rows = np.flatnonzero(labels & ~preds)
+    tp = bootstrap_weight_sum(w, col1[tp_rows], col2[tp_rows])
+    fp = bootstrap_weight_sum(w, col1[fp_rows], col2[fp_rows])
+    fn = bootstrap_weight_sum(w, col1[fn_rows], col2[fn_rows])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        precision = np.where(tp + fp > 0, tp / (tp + fp), 0.0)
+        recall = np.where(tp + fn > 0, tp / (tp + fn), 0.0)
+        f1 = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
+    return {"precision": precision, "recall": recall, "f1": f1}
+
+
+def bootstrap_rate(w, col1, col2, subset_mask, hits):
+    """
+    Share of 'hits' inside a subset of pairs in every bootstrap sample, e.g. the
+    false-positive rate on the hard negatives or the recall on the hard positives.
+    """
+    rows = np.flatnonzero(subset_mask)
+    hit_rows = rows[hits[rows].astype(bool)]
+    all_w = bootstrap_weight_sum(w, col1[rows], col2[rows])
+    hit_w = bootstrap_weight_sum(w, col1[hit_rows], col2[hit_rows])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(all_w > 0, hit_w / all_w, np.nan)
+
+
+def percentile_interval(samples, level=0.95):
+    """Percentile confidence interval of bootstrap samples."""
+    low = (1 - level) / 2 * 100
+    return float(np.nanpercentile(samples, low)), float(np.nanpercentile(samples, 100 - low))
+
+
+# ==========================================================================
+#  Top-k recall and correct matches per reviewed candidates
+# ==========================================================================
+
+def topk_recall(sim, query_idx, target_idx, k_list, chunk=1000):
+    """
+    For every ordered synonym pair (query term -> synonym): is the synonym among the k nearest
+    neighbours of the query (the query itself excluded)? With ties, the hit counts as the chance
+    that a random order of the tied terms puts the synonym inside the top k.
+    Returns {k: mean hit over all synonym pairs}.
+    Each positive pair is used in both directions (term1 -> term2 and term2 -> term1).
+    """
+    n_greater = np.empty(len(query_idx), dtype=np.int64)
+    n_ties = np.empty(len(query_idx), dtype=np.int64)
+    for start in range(0, len(query_idx), chunk):
+        q = query_idx[start:start + chunk]
+        t = target_idx[start:start + chunk]
+        rows = np.array(sim[q], dtype=np.float32)          # copy: (chunk, n_terms)
+        rows[np.arange(len(q)), q] = -np.inf               # the query itself is not a candidate
+        target_score = rows[np.arange(len(q)), t][:, None]
+        greater = (rows > target_score).sum(axis=1)
+        ties = (rows == target_score).sum(axis=1) - 1      # minus the synonym itself
+        n_greater[start:start + chunk] = greater
+        n_ties[start:start + chunk] = ties
+    # The synonym takes one of the places greater+1 ... greater+ties+1, each equally likely.
+    return {k: float(np.mean(np.clip((k - n_greater) / (n_ties + 1), 0, 1))) for k in k_list}
+
+
+def correct_in_top(scores, labels, budgets, seed=42):
+    """
+    Rank all pairs by score (highest first) and count the synonym pairs among the first
+    N pairs, for every N in budgets. Ties at the cut-off are broken at random (fixed seed).
+    Returns {N: number of correct matches among the top N}.
+    """
+    n_top = max(budgets)
+    kth_score = np.partition(scores, len(scores) - n_top)[len(scores) - n_top]
+    candidates = np.flatnonzero(scores >= kth_score)
+    rng = np.random.default_rng(seed)
+    order = candidates[np.lexsort((rng.random(len(candidates)), -scores[candidates]))]
+    return {n: int(labels[order[:n]].sum()) for n in budgets}

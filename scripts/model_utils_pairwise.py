@@ -3,107 +3,57 @@ import numpy as np
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
-import torch
-from sklearn.metrics import precision_score, recall_score, f1_score, matthews_corrcoef
+
+from . import model_utils_shared as shared
+
+# The notebooks compute a term x term similarity matrix once (cosine for the models,
+# character 3-gram Jaccard for the baseline) and pass the similarity of every pair, so the
+# same functions serve the models and the character n-gram baseline.
+# Metrics are computed from confusion counts (same values as sklearn, much faster).
 
 
 # ---------------------------------------------------------------------------
-# 1. Embedding Preparation
-# ---------------------------------------------------------------------------
-
-def compute_similarities(term_embeddings, term_to_idx, terms1, terms2, sim_batch_size=32768):
-    """
-    Compute cosine similarities for pairs using pre-computed, L2-normalised
-    embeddings and an index lookup map.
-
-    Args:
-        term_embeddings: torch.Tensor of shape (n_unique_terms, dim), L2-normalised.
-        term_to_idx:     dict mapping each unique term to its row index in
-                         *term_embeddings*.
-        terms1:          list of first terms in each pair.
-        terms2:          list of second terms in each pair.
-        sim_batch_size:  Number of pairs to process per batch to avoid OOM
-                         errors (default 32 768).
-
-    Returns:
-        np.ndarray of cosine similarities, one per pair.
-    """
-    idx1 = torch.tensor([term_to_idx[t] for t in terms1], dtype=torch.long)
-    idx2 = torch.tensor([term_to_idx[t] for t in terms2], dtype=torch.long)
-
-    n = len(terms1)
-    chunks = []
-    for start in range(0, n, sim_batch_size):
-        end = min(start + sim_batch_size, n)
-        chunk = torch.nn.functional.cosine_similarity(
-            term_embeddings[idx1[start:end]], term_embeddings[idx2[start:end]], dim=1
-        ).cpu().numpy()
-        chunks.append(chunk)
-
-    return np.concatenate(chunks)
-
-
-# ---------------------------------------------------------------------------
-# 2. Single-Run Evaluation (mirror model_utils_seed.py style)
+# 1. Single-Threshold Evaluation
 # ---------------------------------------------------------------------------
 
 def evaluate_pairwise(similarities, labels, threshold):
     """
-    Evaluate pairwise predictions at a **single** cosine-similarity threshold.
+    Evaluate pairwise predictions at a **single** similarity threshold.
 
     Args:
-        similarities: np.ndarray of cosine similarities (one per pair).
+        similarities: np.ndarray of similarities (one per pair).
         labels:       np.ndarray of ground-truth labels (1 / 0).
-        threshold:    float, cosine similarity cut-off.
+        threshold:    float, similarity cut-off (prediction = similarity > threshold).
 
     Returns:
         precision, recall, f1, pos_acc, neg_acc, mcc
     """
-    preds = (similarities > threshold).astype(int)
-
-    p = precision_score(labels, preds, zero_division=0)
-    r = recall_score(labels, preds, zero_division=0)
-    f1 = f1_score(labels, preds, zero_division=0)
-    mcc = matthews_corrcoef(labels, preds) if len(set(preds)) > 1 else 0.0
-
-    pos_mask = labels == 1
-    neg_mask = labels == 0
-    pos_acc = np.mean(preds[pos_mask] == 1) if np.any(pos_mask) else 0.0
-    neg_acc = np.mean(preds[neg_mask] == 0) if np.any(neg_mask) else 0.0
-
-    return p, r, f1, pos_acc, neg_acc, mcc
+    preds = shared.above_threshold(similarities, threshold)
+    m = shared.binary_metrics(labels, preds)
+    pos_acc = m["recall"]                      # share of positives predicted as positive
+    neg_acc = 1.0 - m["fpr"]                   # share of negatives predicted as negative
+    return m["precision"], m["recall"], m["f1"], pos_acc, neg_acc, m["mcc"]
 
 
 # ---------------------------------------------------------------------------
-# 3. Optimisation Pipeline (sweep thresholds)
+# 2. Optimisation Pipeline (sweep thresholds)
 # ---------------------------------------------------------------------------
 
-def run_pairwise_optimization(model_name, model, df, batch_size=16,
+def run_pairwise_optimization(model_name, similarities, labels,
                               thresholds=np.arange(0.10, 1.00, 0.01)):
     """
-    Sweep cosine-similarity thresholds and collect metrics for each.
+    Sweep similarity thresholds and collect metrics for each.
     Internally calls :func:`evaluate_pairwise` per threshold.
+
+    Args:
+        model_name:   name stored in the results.
+        similarities: np.ndarray, one similarity per pair (cosine or Jaccard).
+        labels:       np.ndarray of ground-truth labels.
 
     Returns:
         results:             list[dict] – one entry per threshold.
         best_threshold:      float – threshold that maximised F1.
     """
-    terms1 = df['term1'].tolist()
-    terms2 = df['term2'].tolist()
-    unique_terms = list(set(terms1) | set(terms2))
-    term_to_idx = {term: i for i, term in enumerate(unique_terms)}
-
-    print(f"\n--- Running pairwise optimisation for {model_name} ---")
-    print(f"Encoding {len(unique_terms)} unique concepts...")
-    embeddings_raw = model.encode(
-        unique_terms, convert_to_tensor=True,
-        show_progress_bar=True, batch_size=batch_size
-    )
-    term_embeddings = torch.nn.functional.normalize(embeddings_raw, p=2, dim=1)
-
-    similarities = compute_similarities(term_embeddings, term_to_idx, terms1, terms2)
-    labels = df['label'].values
-
     print(f"\n--- Results per Threshold ({model_name}) ---")
     print(f"{'Threshold':<10} | {'F1':<10} | {'Precision':<10} | "
           f"{'Recall':<10} | {'PosAcc':<10} | {'NegAcc':<10} | {'MCC':<10}")
@@ -114,9 +64,8 @@ def run_pairwise_optimization(model_name, model, df, batch_size=16,
     best_threshold = -1
 
     for t in thresholds:
-        p, r, f1, pos_acc, neg_acc, mcc = evaluate_pairwise(
-            similarities, labels, t
-        )
+        t = round(float(t), 2)
+        p, r, f1, pos_acc, neg_acc, mcc = evaluate_pairwise(similarities, labels, t)
 
         if f1 > best_f1:
             best_f1 = f1
@@ -165,7 +114,7 @@ def plot_individual_performance(model_results, model_name, best_threshold_model,
                  bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
     
     plt.title(f'Performance Analysis: {display_name}', fontsize=14, fontweight='bold')
-    plt.xlabel('Cosine Similarity Threshold', fontsize=12)
+    plt.xlabel('Similarity Threshold', fontsize=12)
     plt.ylabel('Score', fontsize=12)
     
     # Adjusted legend to be smaller and outside if needed, or just smaller inside
@@ -223,7 +172,7 @@ def plot_comparison(summary_df, model_display_names=None, title=None, plots_dir=
             )
 
     plt.title(title or 'F1 Score Comparison Across Models', fontsize=18, fontweight='bold', pad=20)
-    plt.xlabel('Cosine Similarity Threshold', fontsize=14)
+    plt.xlabel('Similarity Threshold', fontsize=14)
     plt.ylabel('F1 Score', fontsize=14)
     
     # Improve legend - Move to bottom to avoid squeezing width

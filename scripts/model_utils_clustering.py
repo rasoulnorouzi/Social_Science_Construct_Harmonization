@@ -4,28 +4,14 @@ import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings
-from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.cluster import HDBSCAN
-from sklearn.preprocessing import normalize
 from umap import UMAP
 
+from . import model_utils_shared as shared
 
-# ---------------------------------------------------------------------------
-# 1. Embedding Preparation
-# ---------------------------------------------------------------------------
-
-def get_unique_terms_embeddings(model, df):
-    """
-    Extracts unique terms and computes their L2-normalised embeddings.
-    """
-    unique_terms = pd.unique(df[['term1', 'term2']].values.ravel('K'))
-    print(f"Computed embeddings for {len(unique_terms)} unique terms.")
-    embeddings = model.encode(unique_terms, convert_to_tensor=False, show_progress_bar=False)
-    # L2 normalize for cosine similarity simulation with Euclidean distance
-    embeddings = normalize(embeddings, norm='l2', axis=1)
-    # Ensure standard double precision and contiguous memory for Scikit-Learn/Cython compatibility
-    embeddings = np.ascontiguousarray(embeddings, dtype=np.float64)
-    return unique_terms, embeddings
+# Embeddings come from model_utils_shared.build_embeddings (one encoding per model,
+# on config.DEVICE). Evaluation works on the integer pair arrays idx1 / idx2
+# (see model_utils_shared.load_pair_data) and computes the metrics from confusion counts.
 
 
 # ---------------------------------------------------------------------------
@@ -91,60 +77,41 @@ def run_hdbscan_clustering(reduced_embeddings, min_cluster_size=5, min_samples=5
     return cluster_labels
 
 
-def evaluate_clustering(cluster_labels, df_pairs, unique_terms):
+def evaluate_clustering(cluster_labels, idx1, idx2, labels):
     """
     Evaluate clustering results against ground-truth pairs.
-    
-    Mirrors evaluate_seed_clustering() from model_utils_seed.py:
-    accepts already-computed cluster labels and returns scalar metrics.
-    
+
     Args:
-        cluster_labels: np.ndarray of cluster assignments (one per unique term).
-        df_pairs: DataFrame with columns 'term1', 'term2', 'label'.
-        unique_terms: array-like of unique terms (same order as cluster_labels).
-    
+        cluster_labels: np.ndarray of cluster assignments (one per term, -1 = noise).
+        idx1, idx2:     int arrays, the two terms of every pair (rows of the term list).
+        labels:         np.ndarray of ground-truth labels (1 / 0).
+
     Returns:
         precision, recall, f1, pos_acc, neg_acc, n_clusters, n_noise
     """
-    term_to_idx = {term: i for i, term in enumerate(unique_terms)}
-
-    # Filter to pairs where both terms are known
-    valid_pairs_mask = df_pairs['term1'].isin(term_to_idx) & df_pairs['term2'].isin(term_to_idx)
-    valid_df = df_pairs[valid_pairs_mask]
-
-    idx1_arr = np.array([term_to_idx[t] for t in valid_df['term1']])
-    idx2_arr = np.array([term_to_idx[t] for t in valid_df['term2']])
-    labels_true = valid_df['label'].values
-
-    # Vectorised prediction
-    l1 = cluster_labels[idx1_arr]
-    l2 = cluster_labels[idx2_arr]
-    preds = ((l1 != -1) & (l1 == l2)).astype(int)
-
-    precision = precision_score(labels_true, preds, zero_division=0)
-    recall = recall_score(labels_true, preds, zero_division=0)
-    f1 = f1_score(labels_true, preds, zero_division=0)
-
-    pos_mask = labels_true == 1
-    neg_mask = labels_true == 0
-    pos_acc = np.mean(preds[pos_mask] == 1) if np.any(pos_mask) else 0.0
-    neg_acc = np.mean(preds[neg_mask] == 0) if np.any(neg_mask) else 0.0
+    preds = shared.same_cluster(cluster_labels, idx1, idx2)
+    m = shared.binary_metrics(labels, preds)
+    pos_acc = m["recall"]
+    neg_acc = 1.0 - m["fpr"]
 
     n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
     n_noise = int(np.sum(cluster_labels == -1))
 
-    return precision, recall, f1, pos_acc, neg_acc, n_clusters, n_noise
+    return m["precision"], m["recall"], m["f1"], pos_acc, neg_acc, n_clusters, n_noise
 
 
 # ---------------------------------------------------------------------------
 # 3. Optimisation Pipeline (sweeps over parameter grid)
 # ---------------------------------------------------------------------------
 
-def run_clustering_optimization(model_display_name, unique_terms, embeddings, df_pairs,
+def run_clustering_optimization(model_display_name, embeddings, idx1, idx2, labels,
                                 min_cluster_sizes, min_samples_list, umap_n_components):
     """
     Sweeps UMAP components, HDBSCAN min_cluster_size and min_samples to
     maximise F1.  Internally calls the single-run building blocks above.
+
+    embeddings: L2-normalised term embeddings (float64, rows = term list).
+    idx1, idx2, labels: the calibration pairs.
     """
     print(f"Optimizing Clustering for {model_display_name}...")
 
@@ -171,7 +138,7 @@ def run_clustering_optimization(model_display_name, unique_terms, embeddings, df
                         reduced_embeddings, min_size, min_samp
                     )
                     p, r, f1, pos_acc, neg_acc, n_clust, n_noise = evaluate_clustering(
-                        cluster_labels, df_pairs, unique_terms
+                        cluster_labels, idx1, idx2, labels
                     )
 
                     results.append({

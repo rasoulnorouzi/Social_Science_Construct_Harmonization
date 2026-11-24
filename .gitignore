@@ -11,7 +11,7 @@ reports2/
 html_to_pdf.py
 draft_third_paper.docx
 
-# Local assistant files (never commit)
+# Local files (never commit)
 CLAUDE.md
 CLAUDE.local.md
 .claude/

@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the technical methodology used to evaluate machine-learning models for the task of **concept harmonisation** in social science thesauri. The evaluation is conducted across two independent datasets — **ELSST** (European Language Social Science Thesaurus) and **APA** (American Psychological Association Thesaurus) — using three harmonisation techniques and five diagnostic tests. The goal is to determine which sentence-embedding model and which harmonisation strategy most reliably identifies synonymous or closely-related social science concepts.
+This document describes the technical methodology used to evaluate machine-learning models for the task of **concept harmonisation** in social science thesauri. The evaluation is conducted across two independent datasets — **ELSST** (European Language Social Science Thesaurus) and **APA** (American Psychological Association Thesaurus) — using three harmonisation techniques, a character n-gram baseline without a language model, and five diagnostic tests.
+
+This version describes the revised pipeline. The code and settings behind the initially submitted results are available under the git tag `v1.0-submission`.
 
 ---
 
@@ -12,18 +14,25 @@ This document describes the technical methodology used to evaluate machine-learn
 
 | Dataset | Role | Terms | Pair Source |
 |---------|------|-------|-------------|
-| **ELSST** | Calibration + held-out test | 1,876 unique | `datasets/processed_datasets/elsst/` |
-| **APA**   | Fully held-out (never seen in calibration) | 11,014 unique | `datasets/processed_datasets/apa/` |
+| **ELSST** | Calibration (train split, 4,270 terms) + held-out test (test split, 1,876 terms) | 6,146 unique | `datasets/processed_datasets/elsst/` |
+| **APA**   | Unseen thesaurus (never used in calibration) | 11,014 unique | `datasets/processed_datasets/apa/` |
 
-Each dataset is represented as a collection of **labelled term pairs**:
+Pairs are built by `scripts/process_dataset.py`. Each dataset is represented as a collection of **labelled term pairs**:
 
-- **Positive pairs** (`label = 1`): two terms that are synonymous or harmonically equivalent according to the expert thesaurus graph.
-- **Negative pairs** (`label = 0`): two terms that are not harmonically equivalent.
+- **Positive pairs** (`label = 1`): every combination of two labels (preferred label and entry terms) of the same concept.
+- **Negative pairs** (`label = 0`): every combination of a label of one concept with a label of another concept, over **all labels** of both concepts (preferred labels and entry terms). Pairs of two concepts on the same family line (a concept with any of its ancestors or descendants, up to the root) are excluded, because a broader and a narrower term share part of their meaning. Rows whose two strings are identical after lowercasing, or that form a positive pair elsewhere in the split (labels shared by two concepts), are skipped. A label that belongs to two concepts (5 labels in the ELSST training split, none in the test split or APA) gives each term pair only one row, and the row is dropped if any owner of one label is on the family line of an owner of the other. Each negative row records its `pair_type` (preferred × preferred, preferred × entry term, entry term × entry term).
+- **Broader/narrower pairs** (separate file, not part of the benchmark): every combination of labels of a concept and one of its ancestors, with the depth (1 = direct parent). Merge rates on these pairs are reported separately.
 
-For ELSST, only the **held-out test split** is used in the final evaluation. For APA — because it was never involved in any hyperparameter calibration — the **full dataset (train + test merged)** is evaluated, giving the most conservative and unbiased estimate of out-of-distribution generalisation.
+ELSST is split 70/30 by concept (seed 42); concepts that share a label are kept in the same split, so no term appears in both splits. Calibration uses only the train split, the final evaluation only the test split. APA is built once over the full thesaurus, without a split, so that negative pairs between all concepts are present.
+
+| Split | Concepts | Terms | Positives | Negatives | Broader/narrower |
+|-------|---------:|------:|----------:|----------:|-----------------:|
+| ELSST train | 2,404 | 4,270 | 3,587 | 9,098,662 | 12,066 |
+| ELSST test | 1,031 | 1,876 | 1,557 | 1,754,671 | 2,522 |
+| APA (full) | 7,333 | 11,014 | 5,639 | 60,562,625 | 80,327 |
 
 Additional metadata available for each pair:
-- `shortest_path`: the graph distance (number of hops) between two terms in the expert thesaurus. Used exclusively in the Structural alignment test.
+- `shortest_path`: the graph distance (number of broader/narrower edges) between the two concepts in the expert thesaurus (−1 = not connected). Used in the Structural alignment test.
 
 ### 1.2 Models Evaluated
 
@@ -40,11 +49,12 @@ Each model produces a dense vector representation (embedding) of dimension 768 f
 
 ### 1.3 Hyperparameter Calibration
 
-All technique-specific hyperparameters were determined on the ELSST dataset via **grid search cross-validation** and are **frozen** for the final evaluation runs. They are loaded from `scripts/config.py`:
+All technique-specific hyperparameters were selected by **grid search on the ELSST train split** (no cross-validation folds), with F1 as the criterion, and are **frozen** for the final evaluation runs. They are loaded from `scripts/config.py`:
 
 - `BEST_CLUSTERING_PARAMS`: HDBSCAN `min_cluster_size`, `min_samples`, UMAP `n_components` per model.
 - `BEST_PAIRWISE_THRESHOLDS`: cosine similarity decision threshold per model.
-- `BEST_SEEDED_PARAMS`: number of initial seeds and similarity threshold per model.
+- `BEST_NGRAM_THRESHOLD`: Jaccard decision threshold of the character 3-gram baseline.
+- `BEST_SEEDED_PARAMS`: number of initial seeds and similarity threshold per model (best mean F1 over 10 seed draws per setting).
 
 This strict separation ensures that reported metrics reflect **true generalisation**, not in-sample fit.
 
@@ -141,7 +151,7 @@ MCC = 1 is perfect prediction, MCC = 0 is random, MCC = −1 is complete inversi
 
 **Step 1 — Seed Sampling**
 
-$K$ seed terms are sampled from the pool of unique terms using `sample_unique_terms()`, ensuring seeds are representative of the term distribution. The number of seeds $K$ is a calibrated hyperparameter (`n_initial_seeds`).
+$K$ seed terms are drawn uniformly at random from all unique terms (`sample_initial_seeds()`), without any gold information. The number of seeds $K$ is a calibrated hyperparameter (`n_initial_seeds`). Because the result depends on the drawn seeds, the final evaluation repeats the technique with 10 seed draws (random seed 42 + d) and reports the mean and SD; the draw with the median F1 is used for the diagnostic tests.
 
 **Step 2 — Cluster Expansion**
 
@@ -153,13 +163,17 @@ Assign $t$ to the cluster of seed $s_k^*$ if:
 
 $$s_k^* = \arg\max_{k} \text{sim}(t, s_k) \quad \text{and} \quad \text{sim}(t, s_k^*) > \theta$$
 
-If no seed exceeds threshold $\theta$, the term remains unassigned ($c_t = -1$).
+The cluster centre is then updated to the running mean of its members. If no centre exceeds threshold $\theta$, the term starts a new cluster. The remaining terms are processed in a random order drawn with the same random state as the seeds, so that synonyms of one concept do not follow each other.
 
 **Step 3 — Prediction**
 
 Identical to clustering:
 
 $$\hat{y}_{ij} = \mathbb{1}[c_i = c_j \text{ and } c_i \neq -1]$$
+
+### 3.4 Character 3-gram baseline (no language model)
+
+Two terms are predicted as equivalent when the Jaccard similarity of their character 3-gram sets (see Section 5.2) exceeds a threshold $\tau_J$. The threshold is calibrated on the ELSST train split in the same way as the cosine thresholds. The baseline shows what pure surface matching achieves, so that the contribution of the embeddings can be read against it.
 
 ---
 
@@ -177,6 +191,14 @@ All three techniques are evaluated using the same classification metrics, treati
 
 The **F1 score** is the primary ranking metric because the dataset is highly class-imbalanced (negative pairs vastly outnumber positive pairs), making accuracy uninformative.
 
+**False-positive rate and F1 at a common prevalence.** Precision and F1 depend on the ratio of negatives to positives, which differs between ELSST and APA. We therefore also report the false-positive rate $\text{FPR} = FP / (FP + TN)$ and the F1 a pipeline would reach at the prevalence of the ELSST test split ($n_+ = 1{,}557$, $n_- = 1{,}754{,}671$), keeping its recall $R$ and FPR fixed:
+
+$$P_{\text{ref}} = \frac{R \cdot n_+}{R \cdot n_+ + \text{FPR} \cdot n_-}, \qquad F1_{\text{ref}} = \frac{2 P_{\text{ref}} R}{P_{\text{ref}} + R}$$
+
+**Uncertainty (concept-level bootstrap).** Pairs are not independent, because one concept appears in many pairs. We resample the concepts of the evaluation set with replacement (1,000 samples). A concept drawn $k$ times counts $k$ times: a pair inside one concept gets weight $k$, a pair of two concepts weight $k_1 k_2$. Precision, recall, F1 and the subset rates of the diagnostic tests are recomputed from the weighted counts, and the 2.5th and 97.5th percentiles give 95 % intervals. The same samples are used for every pipeline, which gives paired intervals for F1 differences. The pipelines are kept fixed (seeded clustering: the median seed draw); seed and noise variation are reported separately.
+
+**Ranking measures.** Top-k recall: for every synonym pair (both directions), whether the synonym is among the k nearest neighbours (k = 1, 5, 10) of the other term among all terms; a synonym tied with other terms counts as the share of tie orders that place it inside the top k. Correct matches per reviewed candidates: all benchmark pairs ranked by similarity (broader/narrower pairs are not part of this list), number of synonym pairs among the first 100, 500 and 1,000.
+
 ---
 
 ## 5. Diagnostic Tests
@@ -185,29 +207,21 @@ Beyond aggregate performance, five diagnostic tests probe failure modes that sum
 
 ### 5.1 Embedding stability test
 
-**Objective:** Quantify how sensitive each model's predictions are to small random perturbations of the embedding space. This is analogous to test-retest reliability in classical test theory, though it measures system-level F1 stability under artificial perturbation rather than individual score consistency.
+**Objective:** Quantify how much the output of each pipeline changes under small random perturbations of the embedding space, and, for seeded clustering, under different seed draws.
 
 **Method:**
 
-For each noise level $\sigma_\epsilon \in \{0, 0.05, 0.10, 0.20, 0.30\}$, Gaussian noise is injected into the raw (unnormalised) embeddings:
+For each noise level $\sigma_\epsilon \in \{0.05, 0.10, 0.20, 0.30\}$, Gaussian noise is injected into the raw (unnormalised) embeddings:
 
 $$\tilde{e}_i = e_i + \sigma_\epsilon \cdot \hat{\sigma} \cdot z_i, \quad z_i \sim \mathcal{N}(0, I)$$
 
-where $\hat{\sigma}$ is the per-dimension empirical standard deviation of the embedding matrix (so noise is scaled relative to the natural variance). The noisy embeddings are then re-normalised and the technique is re-run $k = 5$ times per noise level (each run using a different random seed).
+where $\hat{\sigma}$ is the per-dimension empirical standard deviation of the embedding matrix. The noisy embeddings are re-normalised and the technique is re-run 10 times per noise level (different noise each run; UMAP random state and the seed draw are kept fixed). At $\sigma_\epsilon = 0$, clustering and pairwise thresholding are deterministic (one run); for seeded clustering the runs at $\sigma_\epsilon = 0$ use 10 different seed draws without noise. Seed variation and embedding noise are therefore reported separately.
 
-**Intraclass Correlation Coefficient (ICC):**
+**Reported per noise level** (reference = noise-free run; for seeded clustering, draw 0 without noise):
 
-ICC(1,1) quantifies how consistent predictions are across repeated runs. It is computed from the sum and sum-of-squares of predictions across runs:
-
-$$\text{ICC}(1,1) = \frac{MS_B - MS_W}{MS_B + (k-1) MS_W}$$
-
-where $MS_B$ is the between-pair mean square and $MS_W$ is the within-pair (across-run) mean square. Values near 1 indicate perfectly consistent predictions; values near 0 indicate random variability.
-
-**Standard Error of the Model (SEM):**
-
-$$\text{SEM} = \text{SD}_{F_1} \cdot \sqrt{1 - \text{ICC}}$$
-
-where $\text{SD}_{F_1}$ is the standard deviation of F1 scores across the $k$ runs. A lower SEM indicates the model produces stable, reproducible results even under embedding perturbation. SEM = 0 at noise level σ = 0 is expected (deterministic inputs produce identical outputs).
+- mean F1 and SD of F1 across runs;
+- mean change of F1 from the reference run;
+- mean agreement of the predicted matches with the reference run, measured as the Jaccard overlap of the two sets of predicted synonym pairs (1 = identical predictions).
 
 ### 5.2 Lexical trap test
 
@@ -265,9 +279,11 @@ $$\text{Retention Rate} = \frac{\text{Recall}_{\text{Rare}}}{\text{Recall}_{\tex
 
 A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of the model's common-word recall survives on rare words?" independently of the model's absolute performance level. Values close to **1.0** indicate low bias; values close to **0** indicate strong rare-word penalty. $\text{NaN}$ when $\text{Recall}_{\text{Common}} = 0$.
 
+**Rare-word gap within overlap bands.** Rare terms may share fewer letters with their synonyms. To separate frequency from lexical overlap, the positive pairs are split into three character 3-gram bands ($J = 0$, $0 < J \le 0.5$, $J > 0.5$) and $\Delta\text{Recall}$ is computed inside each band with the same frequency cut-offs. The pooled gap is the average of the band gaps weighted by $1/(1/n_{\text{rare}} + 1/n_{\text{common}})$.
+
 ### 5.4 Semantic decay test
 
-**Objective:** Test whether models can recognise synonymy when there is no lexical overlap between the two terms — i.e., when purely semantic (not surface) understanding is required. Prior work on scientific synonymy detection has shown that high performance on some datasets is partly explained by morphological resemblance rather than genuine semantic understanding (Thießen & Stocker, 2024), which motivates testing this distinction directly.
+**Objective:** Test whether models can recognise synonymy when there is no lexical overlap between the two terms — i.e., when purely semantic (not surface) understanding is required. Prior work on scientific synonymy detection has shown that high performance on some datasets is partly explained by morphological resemblance rather than genuine semantic understanding (Thießen et al., 2023), which motivates testing this distinction directly.
 
 **Subset Definitions (Positive Pairs Only):**
 
@@ -292,26 +308,13 @@ A scale-free complement to $\Delta\text{Recall}$: answers "what fraction of easy
 
 **Objective:** A measurement instrument satisfies the structural aspect of construct validity when the internal organisation it implies matches the internal organisation of the construct (Messick, 1995). This test assesses whether the model's internal distance metric reflects the structure of the expert-curated thesaurus graph.
 
-**Expert Reference:** The `shortest_path` column encodes the graph distance (minimum number of edges) between two terms in the APA or ELSST thesaurus graph. A distance of 1 means direct synonymy/relationship; larger values indicate more distal conceptual relationships.
+**Expert Reference:** The `shortest_path` column encodes the graph distance (number of broader/narrower edges) between the two concepts of a pair. Negative pairs have a path length of at least 2 (all ancestor–descendant pairs, at any depth, are excluded), or −1 when the two concepts are not connected.
 
-**Model Distance (binary for all three techniques):**
+The test has two parts. Neither of them uses a correlation with the binary synonym decision, because such a correlation can increase when a pipeline wrongly merges nearby but different concepts.
 
-For each pair of terms, the model distance is derived from the technique's final output — cluster co-membership for clustering and seeded clustering, and the thresholded pair decision for pairwise:
+**(A) Model level — similarity against thesaurus distance.** Among connected non-synonym pairs (path length ≥ 2), Spearman's ρ between the similarity score (cosine for the models, Jaccard for the baseline) and the path length. On APA, ρ is computed on a fixed random sample of 5 million pairs (standard error about 0.0005). A negative ρ means that similarity decreases as concepts are further apart in the thesaurus. The mean similarity per path length (2, 3, 4, 5–6, 7+) is reported as well. One value per model.
 
-$$d_{\text{model}}(i,j) = \mathbb{1}[\hat{y}_{ij} = 1]$$
-
-(0 = same predicted concept, 1 = different)
-
-**Expert proximity** is defined as $p_{\text{expert}} = \max(\text{shortest\_path}) - \text{shortest\_path}$, so that higher proximity = closer in the reference graph. Under this convention, **positive r = agreement** with the expert ontology.
-
-**Two Correlation Coefficients:**
-
-| Coefficient | Formula | Use Case |
-|-------------|---------|----------|
-| **Spearman ρ** | Rank correlation of $(p_{\text{expert}}, d_{\text{model}})$ | Robust to non-linear monotonic relationships; does not assume normality |
-| **Point-biserial r** | Point-biserial correlation (`scipy.stats.pointbiserialr`) between the binary same-cluster indicator and continuous expert proximity | Matched effect size for a genuine binary dichotomy paired with a continuous variable |
-
-A **point-biserial r closer to +1** indicates that pairs classified as same-cluster (predicted synonyms) genuinely have short expert graph distances, while pairs in different clusters correspond to large expert distances. Larger absolute values of Spearman ρ indicate stronger monotonic structural alignment.
+**(B) Pipeline level — false merges by thesaurus distance.** For each pipeline, the false-positive rate among negative pairs at each path length (2, 3, 4, 5–6, 7+, not connected). Lower is better at every distance. The share of all false merges that fall at path length 2–4 (`near_miss_share`) describes whether a pipeline's errors are near misses.
 
 ---
 
@@ -322,8 +325,11 @@ A **point-biserial r closer to +1** indicates that pairs classified as same-clus
 All stochastic operations use a fixed global seed (`SEED = 42`), including:
 - UMAP dimensionality reduction.
 - HDBSCAN (stochastic aspects).
-- Seeded clustering's random seed sampling.
+- Seeded clustering's random seed sampling (draw d uses seed 42 + d).
 - Noise injection in the Embedding stability test (seeds are offset by run index and noise level to ensure non-overlapping random states).
+- The concept-level bootstrap.
+
+The GPU, when available, is only used to encode the terms. Similarity matrices, clustering and all metrics are computed on the CPU, so the results do not depend on the device beyond the rounding of the encoder itself.
 
 ### Computational Flow
 
@@ -357,335 +363,26 @@ unique_terms
 | `sentence-transformers` | Sentence embedding encoding |
 | `torch` | Tensor operations, GPU acceleration |
 | `umap-learn` | UMAP dimensionality reduction |
-| `hdbscan` | Density-based clustering |
+| `scikit-learn` | HDBSCAN density-based clustering, L2 normalisation |
 | `wordfreq` | Zipf word frequency lookups (Rare-word bias test) |
-| `sklearn` | L2 normalisation, evaluation metrics |
-| `numpy` | Array operations, ICC computation |
-| `scipy` | Statistical correlations |
+| `numpy` | Array operations, metrics from confusion counts, bootstrap |
+| `scipy` | Spearman correlation, sparse character n-gram matrices |
+| `pyarrow` | Reading and writing the Parquet pair files |
 
 ---
 
 ## 7. Results
 
-### 7.1 Primary Performance — ELSST (Held-Out Test Set)
-
-ELSST has **1,876 unique terms** and **241,280 pairs with valid expert graph distances**. Hyperparameters were calibrated on this dataset and are frozen; only the held-out test split is evaluated here.
-
-#### 7.1.1 Clustering (UMAP + HDBSCAN)
-
-| Model | Precision | Recall | F1 | Pos Acc | Neg Acc | Clusters | Noise Points |
-|-------|:---------:|:------:|:--:|:-------:|:-------:|:--------:|:------------:|
-| All-MPNet-Base-v2 | 0.7016 | 0.5029 | **0.5859** | 0.5029 | 0.9994 | 492 | 472 |
-| MPNet-Personality | 0.6845 | 0.4920 | 0.5725 | 0.4920 | 0.9993 | 476 | 487 |
-| SciBERT (SciVocab) | 0.6099 | 0.2922 | 0.3951 | 0.2922 | 0.9995 | 421 | 724 |
-| BERT Base | 0.4820 | 0.2832 | 0.3568 | 0.2832 | 0.9991 | 399 | 755 |
-
-#### 7.1.2 Pairwise (Cosine Similarity Thresholding)
-
-| Model | Threshold τ | Precision | Recall | F1 | Pos Acc | Neg Acc | MCC |
-|-------|:-----------:|:---------:|:------:|:--:|:-------:|:-------:|:---:|
-| All-MPNet-Base-v2 | 0.69 | 0.7365 | 0.4811 | **0.5820** | 0.4811 | 0.9995 | 0.5943 |
-| MPNet-Personality | 0.66 | 0.7070 | 0.4464 | 0.5472 | 0.4464 | 0.9995 | 0.5608 |
-| SciBERT (SciVocab) | 0.89 | 0.4797 | 0.2575 | 0.3351 | 0.2575 | 0.9992 | 0.3501 |
-| BERT Base | 0.90 | 0.3911 | 0.1522 | 0.2191 | 0.1522 | 0.9993 | 0.2427 |
-
-#### 7.1.3 Seeded Clustering
-
-| Model | Seeds K | Threshold θ | Precision | Recall | F1 | Pos Acc | Neg Acc |
-|-------|:-------:|:-----------:|:---------:|:------:|:--:|:-------:|:-------:|
-| All-MPNet-Base-v2 | 250 | 0.70 | 0.7587 | 0.4624 | **0.5746** | 0.4624 | 0.9996 |
-| MPNet-Personality | 10 | 0.70 | 0.7341 | 0.3937 | 0.5125 | 0.3937 | 0.9996 |
-| SciBERT (SciVocab) | 250 | 0.85 | 0.1360 | 0.3648 | 0.1982 | 0.3648 | 0.9932 |
-| BERT Base | 250 | 0.85 | 0.1558 | 0.3031 | 0.2058 | 0.3031 | 0.9952 |
-
-**Best model on ELSST:** All-MPNet-Base-v2 across all three techniques. Note the large precision–recall gap for SciBERT and BERT under seeded clustering: high recall but very low precision indicates these models over-expand clusters when seeds are fixed.
-
----
-
-### 7.2 Primary Performance — APA (Full Dataset, Out-of-Distribution)
-
-APA has **11,014 unique terms** and **15,387,276 pairs with valid expert graph distances**. This dataset was never used in calibration, making it a strict test of cross-thesaurus generalisation.
-
-#### 7.2.1 Clustering (UMAP + HDBSCAN)
-
-| Model | Precision | Recall | F1 | Pos Acc | Neg Acc | Clusters | Noise Points |
-|-------|:---------:|:------:|:--:|:-------:|:-------:|:--------:|:------------:|
-| MPNet-Personality | 0.6092 | 0.3958 | **0.4798** | 0.3958 | 0.9999 | 2,779 | 3,421 |
-| All-MPNet-Base-v2 | 0.5982 | 0.3949 | 0.4758 | 0.3949 | 0.9999 | 2,725 | 3,486 |
-| SciBERT (SciVocab) | 0.3228 | 0.1887 | 0.2382 | 0.1887 | 0.9999 | 2,338 | 4,364 |
-| BERT Base | 0.3189 | 0.1727 | 0.2241 | 0.1727 | 0.9999 | 2,267 | 4,626 |
-
-#### 7.2.2 Pairwise (Cosine Similarity Thresholding)
-
-| Model | Threshold τ | Precision | Recall | F1 | Pos Acc | Neg Acc | MCC |
-|-------|:-----------:|:---------:|:------:|:--:|:-------:|:-------:|:---:|
-| MPNet-Personality | 0.66 | 0.4889 | 0.4536 | **0.4706** | 0.4536 | 0.9998 | 0.4708 |
-| All-MPNet-Base-v2 | 0.69 | 0.4343 | 0.5013 | 0.4654 | 0.5013 | 0.9998 | 0.4664 |
-| SciBERT (SciVocab) | 0.89 | 0.1254 | 0.2289 | 0.1621 | 0.2289 | 0.9994 | 0.1691 |
-| BERT Base | 0.90 | 0.0678 | 0.1218 | 0.0871 | 0.1218 | 0.9994 | 0.0904 |
-
-#### 7.2.3 Seeded Clustering
-
-| Model | Seeds K | Threshold θ | Precision | Recall | F1 | Pos Acc | Neg Acc |
-|-------|:-------:|:-----------:|:---------:|:------:|:--:|:-------:|:-------:|
-| MPNet-Personality | 10 | 0.70 | 0.4874 | 0.3745 | **0.4236** | 0.3745 | 0.9999 |
-| All-MPNet-Base-v2 | 250 | 0.70 | 0.3672 | 0.4503 | 0.4045 | 0.4503 | 0.9997 |
-| SciBERT (SciVocab) | 250 | 0.85 | 0.0138 | 0.2596 | 0.0262 | 0.2596 | 0.9933 |
-| BERT Base | 250 | 0.85 | 0.0182 | 0.2013 | 0.0334 | 0.2013 | 0.9961 |
-
-**Best model on APA:** MPNet-Personality edges out All-MPNet-Base-v2 (marginal gap of ≤ 0.004 F1). Both MPNet variants show a consistent ~0.10 F1 drop from ELSST to APA, reflecting the challenge of cross-thesaurus generalisation. SciBERT and BERT collapse under seeded clustering on APA (F1 < 0.04) because the technique requires high-quality embeddings to expand clusters coherently.
-
----
-
-### 7.3 F1 Cross-Comparison (Both Datasets)
-
-| Model | ELSST Clust | ELSST Pair | ELSST Seed | APA Clust | APA Pair | APA Seed |
-|-------|:-----------:|:----------:|:----------:|:---------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | **0.5859** | **0.5820** | **0.5746** | 0.4758 | 0.4654 | 0.4045 |
-| MPNet-Personality | 0.5725 | 0.5472 | 0.5125 | **0.4798** | **0.4706** | **0.4236** |
-| SciBERT (SciVocab) | 0.3951 | 0.3351 | 0.1982 | 0.2382 | 0.1621 | 0.0262 |
-| BERT Base | 0.3568 | 0.2191 | 0.2058 | 0.2241 | 0.0871 | 0.0334 |
-
-All models degrade on APA. The MPNet models are robust (F1 drop ≈ 0.10); BERT and SciBERT degrade more severely (F1 drop ≈ 0.15–0.17 for pairwise/seeded), indicating they overfit to ELSST vocabulary during pretraining alignment.
-
----
-
-### 7.4 Embedding stability test — Results
-
-For each model, the technique is repeated k = 5 times at five noise levels. The table reports mean F1 and SEM. Lower SEM = more stable model.
-
-#### ELSST — Clustering
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.5859 / SEM 0.0000 | 0.5840 / SEM 0.0004 | 0.5838 / SEM 0.0011 | 0.5851 / SEM 0.0013 | 0.5923 / SEM 0.0025 |
-| MPNet-Personality | 0.5725 / SEM 0.0000 | 0.5720 / SEM 0.0003 | 0.5712 / SEM 0.0005 | 0.5704 / SEM 0.0010 | 0.5809 / SEM 0.0015 |
-| SciBERT (SciVocab) | 0.3951 / SEM 0.0000 | 0.3936 / SEM 0.0006 | 0.3898 / SEM 0.0004 | 0.3891 / SEM 0.0012 | 0.3846 / SEM 0.0026 |
-| BERT Base | 0.3568 / SEM 0.0000 | 0.3605 / SEM 0.0004 | 0.3643 / SEM 0.0022 | 0.3493 / **SEM 0.0304** | 0.3621 / **SEM 0.0239** |
-
-#### ELSST — Pairwise
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.5820 / SEM 0.0000 | 0.5833 / SEM 0.0001 | 0.5780 / SEM 0.0003 | 0.5540 / SEM 0.0005 | 0.5077 / SEM 0.0006 |
-| MPNet-Personality | 0.5472 / SEM 0.0000 | 0.5456 / SEM 0.0001 | 0.5428 / SEM 0.0001 | 0.5272 / SEM 0.0004 | 0.4835 / SEM 0.0005 |
-| SciBERT (SciVocab) | 0.3351 / SEM 0.0000 | 0.3362 / SEM 0.0001 | 0.3330 / SEM 0.0004 | 0.3164 / SEM 0.0007 | 0.2671 / SEM 0.0008 |
-| BERT Base | 0.2191 / SEM 0.0000 | 0.2163 / SEM 0.0001 | 0.2086 / SEM 0.0005 | 0.1597 / SEM 0.0013 | 0.0930 / SEM 0.0009 |
-
-#### ELSST — Seeded Clustering
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.5728 / SEM 0.0013 | 0.5721 / SEM 0.0014 | 0.5707 / SEM 0.0018 | 0.5459 / SEM 0.0013 | 0.5151 / SEM 0.0020 |
-| MPNet-Personality | 0.5125 / SEM 0.0000 | 0.5104 / SEM 0.0003 | 0.5034 / SEM 0.0004 | 0.4766 / SEM 0.0017 | 0.4220 / SEM 0.0007 |
-| SciBERT (SciVocab) | 0.1851 / **SEM 0.0162** | 0.1822 / **SEM 0.0158** | 0.1844 / **SEM 0.0177** | 0.1710 / **SEM 0.0183** | 0.1635 / SEM 0.0146 |
-| BERT Base | 0.2034 / **SEM 0.0227** | 0.2023 / **SEM 0.0189** | 0.2017 / **SEM 0.0198** | 0.1842 / **SEM 0.0221** | 0.1728 / **SEM 0.0178** |
-
-#### APA — Clustering
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.4758 / SEM 0.0000 | 0.4757 / SEM 0.0002 | 0.4763 / SEM 0.0002 | 0.4770 / SEM 0.0008 | 0.4785 / SEM 0.0013 |
-| MPNet-Personality | 0.4798 / SEM 0.0000 | 0.4773 / SEM 0.0002 | 0.4765 / SEM 0.0003 | 0.4742 / SEM 0.0006 | 0.4718 / SEM 0.0007 |
-| SciBERT (SciVocab) | 0.2382 / SEM 0.0000 | 0.2391 / SEM 0.0004 | 0.2381 / SEM 0.0011 | 0.2351 / SEM 0.0012 | 0.2304 / SEM 0.0016 |
-| BERT Base | 0.2241 / SEM 0.0000 | 0.2224 / SEM 0.0003 | 0.2225 / SEM 0.0004 | 0.2149 / SEM 0.0032 | 0.2063 / SEM 0.0041 |
-
-#### APA — Pairwise
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.4654 / SEM 0.0000 | 0.4664 / SEM 0.0001 | 0.4705 / SEM 0.0001 | 0.4836 / SEM 0.0003 | 0.4852 / SEM 0.0004 |
-| MPNet-Personality | 0.4706 / SEM 0.0000 | 0.4709 / SEM 0.0000 | 0.4726 / SEM 0.0001 | 0.4764 / SEM 0.0002 | 0.4638 / SEM 0.0003 |
-| SciBERT (SciVocab) | 0.1621 / SEM 0.0000 | 0.1635 / SEM 0.0000 | 0.1696 / SEM 0.0001 | 0.1875 / SEM 0.0003 | 0.1918 / SEM 0.0005 |
-| BERT Base | 0.0871 / SEM 0.0000 | 0.0883 / SEM 0.0000 | 0.0911 / SEM 0.0002 | 0.0964 / SEM 0.0004 | 0.0749 / SEM 0.0010 |
-
-#### APA — Seeded Clustering
-
-| Model | σ = 0.00 | σ = 0.05 | σ = 0.10 | σ = 0.20 | σ = 0.30 |
-|-------|:--------:|:--------:|:--------:|:--------:|:--------:|
-| All-MPNet-Base-v2 | 0.3979 / SEM 0.0027 | 0.3999 / SEM 0.0028 | 0.4023 / SEM 0.0020 | 0.4192 / SEM 0.0031 | 0.4284 / SEM 0.0025 |
-| MPNet-Personality | 0.4238 / SEM 0.0000 | 0.4233 / SEM 0.0001 | 0.4228 / SEM 0.0003 | 0.4153 / SEM 0.0006 | 0.3945 / SEM 0.0008 |
-| SciBERT (SciVocab) | 0.0286 / SEM 0.0012 | 0.0283 / SEM 0.0012 | 0.0293 / SEM 0.0011 | 0.0275 / SEM 0.0017 | 0.0274 / SEM 0.0012 |
-| BERT Base | 0.0407 / SEM 0.0033 | 0.0403 / SEM 0.0034 | 0.0401 / SEM 0.0024 | 0.0375 / SEM 0.0024 | 0.0332 / SEM 0.0030 |
-
-**Key observations:** The pairwise technique is the most stable (lowest SEM). BERT Base under clustering on ELSST shows a pathological SEM spike at σ = 0.20 (SEM = 0.0304), indicating HDBSCAN cluster boundaries near BERT's embedding manifold are sensitive to noise. All-MPNet-Base-v2 and MPNet-Personality maintain near-zero SEM up to σ = 0.30 in clustering and pairwise, confirming high measurement reliability.
-
----
-
-### 7.5 Lexical trap test — Results
-
-FPR on hard negatives (Jaccard > 0.5) vs. easy negatives (Jaccard = 0.0). Lower FPR is better on hard negatives.
-
-#### ELSST (N hard = 65, N easy = 434,190)
-
-| Technique | Model | Hard Neg FPR | Hard Neg FP | Easy Neg FPR | Easy Neg FP |
-|-----------|-------|:------------:|:-----------:|:------------:|:-----------:|
-| Clustering | All-MPNet-Base-v2 | 0.2000 | 13 | 0.0002 | 94 |
-| Clustering | MPNet-Personality | 0.2769 | 18 | 0.0002 | 68 |
-| Clustering | SciBERT (SciVocab) | **0.1077** | 7 | 0.0002 | 94 |
-| Clustering | BERT Base | 0.2462 | 16 | 0.0005 | 215 |
-| Pairwise | All-MPNet-Base-v2 | 0.3077 | 20 | 0.0001 | 39 |
-| Pairwise | MPNet-Personality | 0.2923 | 19 | 0.0001 | 23 |
-| Pairwise | SciBERT (SciVocab) | 0.1692 | 11 | 0.0003 | 148 |
-| Pairwise | BERT Base | **0.1077** | 7 | 0.0006 | 254 |
-| Seeded | All-MPNet-Base-v2 | 0.1846 | 12 | 0.0001 | 39 |
-| Seeded | MPNet-Personality | 0.2154 | 14 | 0.0000 | 15 |
-| Seeded | SciBERT (SciVocab) | 0.2769 | 18 | 0.0059 | 2,556 |
-| Seeded | BERT Base | 0.2769 | 18 | 0.0047 | 2,037 |
-
-#### APA (N hard = 932, N easy = 12,886,583)
-
-| Technique | Model | Hard Neg FPR | Hard Neg FP | Easy Neg FPR | Easy Neg FP |
-|-----------|-------|:------------:|:-----------:|:------------:|:-----------:|
-| Clustering | All-MPNet-Base-v2 | 0.1931 | 180 | 0.0000 | 295 |
-| Clustering | MPNet-Personality | **0.1856** | 173 | 0.0000 | 270 |
-| Clustering | SciBERT (SciVocab) | 0.2200 | 205 | 0.0000 | 339 |
-| Clustering | BERT Base | 0.2006 | 187 | 0.0000 | 289 |
-| Pairwise | All-MPNet-Base-v2 | 0.3262 | 304 | 0.0000 | 536 |
-| Pairwise | MPNet-Personality | 0.2929 | 273 | 0.0000 | 195 |
-| Pairwise | SciBERT (SciVocab) | 0.3155 | 294 | 0.0003 | 3,955 |
-| Pairwise | BERT Base | **0.1770** | 165 | 0.0006 | 7,182 |
-| Seeded | All-MPNet-Base-v2 | 0.2414 | 225 | 0.0001 | 1,287 |
-| Seeded | MPNet-Personality | **0.2114** | 197 | 0.0000 | 225 |
-| Seeded | SciBERT (SciVocab) | 0.3680 | 343 | 0.0059 | 76,034 |
-| Seeded | BERT Base | 0.3015 | 281 | 0.0037 | 47,737 |
-
-**Key observations:** SciBERT and BERT achieve low FPR on hard negatives under pairwise/clustering because their thresholds are very conservative (τ = 0.89–0.90), not because they genuinely discriminate well. The cost is visible in low recall (Tables 7.1.2, 7.2.2). Under seeded clustering, SciBERT and BERT generate massive easy-negative false positives on APA (76K and 47K respectively), showing uncontrolled cluster expansion into unrelated terms.
-
----
-
-### 7.6 Rare-word bias test — Results
-
-ΔRecall = Recall(Common) − Recall(Rare). Positive values indicate bias against rare terms. Retention Rate = Recall(Rare) / Recall(Common) — closer to 1.0 = less bias. N = 156 common / 156 rare pairs (ELSST); 565 common / 567 rare pairs (APA).
-
-#### ELSST
-
-| Technique | Model | Recall Common | Recall Rare | ΔRecall | Retention Rate |
-|-----------|-------|:-------------:|:-----------:|:-------:|:--------------:|
-| Clustering | All-MPNet-Base-v2 | 0.4615 | 0.4103 | +0.0513 | 0.8891 |
-| Clustering | MPNet-Personality | 0.4744 | 0.3910 | +0.0833 | 0.8244 |
-| Clustering | SciBERT (SciVocab) | 0.2628 | 0.2051 | +0.0577 | 0.7804 |
-| Clustering | BERT Base | 0.3333 | 0.1731 | +0.1603 | 0.5194 |
-| Pairwise | All-MPNet-Base-v2 | 0.5064 | 0.3141 | +0.1923 | 0.6202 |
-| Pairwise | MPNet-Personality | 0.4487 | 0.2692 | +0.1795 | 0.5999 |
-| Pairwise | SciBERT (SciVocab) | 0.2372 | 0.1410 | +0.0962 | 0.5945 |
-| Pairwise | BERT Base | 0.1410 | 0.0833 | +0.0577 | 0.5908 |
-| Seeded | All-MPNet-Base-v2 | 0.4359 | 0.3205 | +0.1154 | 0.7352 |
-| Seeded | MPNet-Personality | 0.3718 | 0.2372 | +0.1346 | 0.6380 |
-| Seeded | SciBERT (SciVocab) | 0.3526 | 0.2308 | +0.1218 | 0.6546 |
-| Seeded | BERT Base | 0.2821 | 0.1346 | +0.1474 | 0.4772 |
-
-#### APA
-
-| Technique | Model | Recall Common | Recall Rare | ΔRecall | Retention Rate |
-|-----------|-------|:-------------:|:-----------:|:-------:|:--------------:|
-| Clustering | All-MPNet-Base-v2 | 0.5327 | 0.2257 | +0.3070 | 0.4237 |
-| Clustering | MPNet-Personality | 0.5310 | 0.2187 | +0.3123 | 0.4118 |
-| Clustering | SciBERT (SciVocab) | 0.2655 | 0.1429 | +0.1226 | 0.5382 |
-| Clustering | BERT Base | 0.2212 | 0.1693 | **+0.0519** | **0.7653** |
-| Pairwise | All-MPNet-Base-v2 | 0.6602 | 0.2557 | +0.4044 | 0.3873 |
-| Pairwise | MPNet-Personality | 0.6035 | 0.2257 | +0.3778 | 0.3740 |
-| Pairwise | SciBERT (SciVocab) | 0.3062 | 0.1587 | +0.1475 | 0.5183 |
-| Pairwise | BERT Base | 0.1770 | 0.0899 | +0.0870 | 0.5079 |
-| Seeded | All-MPNet-Base-v2 | 0.6071 | 0.2257 | +0.3813 | 0.3718 |
-| Seeded | MPNet-Personality | 0.4938 | 0.1711 | +0.3227 | 0.3465 |
-| Seeded | SciBERT (SciVocab) | 0.3168 | 0.2416 | +0.0752 | 0.7626 |
-| Seeded | BERT Base | 0.2549 | 0.1517 | +0.1032 | 0.5951 |
-
-**Key observations:** The ΔRecall gap is ~3–5× larger on APA than ELSST for MPNet models (e.g., All-MPNet-Base-v2 pairwise: +0.19 on ELSST vs. +0.40 on APA). This suggests the APA thesaurus contains a greater proportion of technical, low-frequency terms that all models fail to match. Interestingly, BERT Base has the lowest ΔRecall on APA clustering (+0.05), but its Retention Rate (0.77) reveals that its low absolute ΔRecall reflects uniformly poor recall on both subsets — not genuine frequency fairness. By contrast, MPNet models with high ΔRecall also have low Retention Rates (~0.37–0.42), meaning they are proportionally more biased against rare terms despite their higher absolute performance.
-
----
-
-### 7.7 Semantic decay test — Results
-
-ΔRecall = Recall(Hard) − Recall(Easy). All values are negative. Retention Rate = Recall(Hard) / Recall(Easy) — closer to 1.0 = less semantic decay. N easy = 152 / N hard = 517 (ELSST); N easy = 1,086 / N hard = 1,447 (APA).
-
-#### ELSST
-
-| Technique | Model | Recall Easy | Recall Hard | ΔRecall | Retention Rate |
-|-----------|-------|:-----------:|:-----------:|:-------:|:--------------:|
-| Clustering | All-MPNet-Base-v2 | 0.8684 | 0.2708 | −0.5976 | 0.3118 |
-| Clustering | MPNet-Personality | 0.8816 | 0.2495 | −0.6321 | 0.2830 |
-| Clustering | SciBERT (SciVocab) | 0.6447 | 0.0600 | −0.5848 | 0.0931 |
-| Clustering | BERT Base | 0.6053 | 0.0812 | −0.5240 | 0.1342 |
-| Pairwise | All-MPNet-Base-v2 | 0.8816 | 0.1683 | −0.7133 | 0.1909 |
-| Pairwise | MPNet-Personality | 0.8816 | 0.1219 | −0.7597 | 0.1383 |
-| Pairwise | SciBERT (SciVocab) | 0.5724 | 0.0329 | −0.5395 | 0.0575 |
-| Pairwise | BERT Base | 0.4079 | 0.0426 | **−0.3653** | 0.1044 |
-| Seeded | All-MPNet-Base-v2 | 0.8289 | 0.1934 | −0.6355 | 0.2333 |
-| Seeded | MPNet-Personality | 0.8355 | 0.1199 | −0.7156 | 0.1435 |
-| Seeded | SciBERT (SciVocab) | 0.7303 | 0.1044 | −0.6258 | 0.1429 |
-| Seeded | BERT Base | 0.6118 | 0.0986 | −0.5132 | 0.1612 |
-
-#### APA
-
-| Technique | Model | Recall Easy | Recall Hard | ΔRecall | Retention Rate |
-|-----------|-------|:-----------:|:-----------:|:-------:|:--------------:|
-| Clustering | All-MPNet-Base-v2 | 0.8444 | 0.0968 | −0.7476 | 0.1147 |
-| Clustering | MPNet-Personality | 0.8600 | 0.1037 | −0.7564 | 0.1206 |
-| Clustering | SciBERT (SciVocab) | 0.3250 | 0.0256 | **−0.2995** | 0.0787 |
-| Clustering | BERT Base | 0.3766 | 0.0249 | −0.3517 | 0.0661 |
-| Pairwise | All-MPNet-Base-v2 | 0.9273 | 0.1493 | −0.7780 | 0.1610 |
-| Pairwise | MPNet-Personality | 0.8978 | 0.1030 | −0.7948 | 0.1147 |
-| Pairwise | SciBERT (SciVocab) | 0.3508 | 0.0290 | −0.3218 | 0.0827 |
-| Pairwise | BERT Base | 0.2882 | 0.0242 | −0.2640 | 0.0840 |
-| Seeded | All-MPNet-Base-v2 | 0.8517 | 0.1272 | −0.7246 | 0.1493 |
-| Seeded | MPNet-Personality | 0.8112 | 0.0753 | −0.7359 | 0.0928 |
-| Seeded | SciBERT (SciVocab) | 0.3204 | 0.0878 | −0.2327 | 0.2741 |
-| Seeded | BERT Base | 0.3941 | 0.0463 | −0.3478 | 0.1175 |
-
-**Key observations:** The semantic decay ΔRecall is universally severe. Even the best model (All-MPNet-Base-v2 pairwise on ELSST) drops from recall 0.88 on easy pairs to 0.17 on hard pairs (ΔRecall = −0.71; Retention Rate = 0.19). Hard positives with zero character overlap represent the core challenge: these require genuinely semantic rather than surface-level matching. The MPNet models have the highest easy recall (≥ 0.88) and also the lowest Retention Rates (0.11–0.23), revealing strong surface sensitivity relative to their own capability. BERT models show shallower ΔRecall but similarly low Retention Rates — their easy-pair recall is already low, so there is less absolute room to fall.
-
----
-
-### 7.8 Structural alignment test — Results
-
-Correlation between the model's same-cluster indicator (binary) and **expert proximity** ($\max(\text{shortest\_path}) - \text{shortest\_path}$). Pairs with valid `shortest_path`: 241,280 (ELSST) and 15,387,276 (APA). Larger absolute values indicate stronger structural alignment with the expert ontology. The tables below are populated automatically by the diagnostic notebooks; refer to `analysis/results/{elsst,apa}/structural_alignment.csv` for the current numbers.
-
-#### ELSST
-
-| Technique | Model | Spearman ρ | Point-biserial r |
-|-----------|-------|:----------:|:----------------:|
-| Clustering | All-MPNet-Base-v2 | **0.1042** | **0.1361** |
-| Clustering | MPNet-Personality | 0.1009 | 0.1318 |
-| Clustering | SciBERT (SciVocab) | 0.0828 | 0.1064 |
-| Clustering | BERT Base | 0.0778 | 0.0997 |
-| Seeded | All-MPNet-Base-v2 | **0.0998** | **0.1308** |
-| Seeded | MPNet-Personality | 0.0923 | 0.1208 |
-| Seeded | SciBERT (SciVocab) | 0.0894 | 0.1060 |
-| Seeded | BERT Base | 0.0678 | 0.0846 |
-| Pairwise | All-MPNet-Base-v2 | **0.1027** | **0.1341** |
-| Pairwise | MPNet-Personality | 0.0995 | 0.1294 |
-| Pairwise | SciBERT (SciVocab) | 0.0800 | 0.1013 |
-| Pairwise | BERT Base | 0.0534 | 0.0680 |
-
-#### APA
-
-| Technique | Model | Spearman ρ | Point-biserial r |
-|-----------|-------|:----------:|:----------------:|
-| Clustering | All-MPNet-Base-v2 | **0.0235** | **0.0431** |
-| Clustering | MPNet-Personality | 0.0223 | 0.0415 |
-| Clustering | SciBERT (SciVocab) | 0.0215 | 0.0351 |
-| Clustering | BERT Base | 0.0200 | 0.0327 |
-| Seeded | All-MPNet-Base-v2 | **0.0297** | **0.0489** |
-| Seeded | MPNet-Personality | 0.0220 | 0.0399 |
-| Seeded | SciBERT (SciVocab) | 0.0566 | 0.0659 |
-| Seeded | BERT Base | 0.0319 | 0.0378 |
-| Pairwise | All-MPNet-Base-v2 | **0.0294** | **0.0508** |
-| Pairwise | MPNet-Personality | 0.0254 | 0.0454 |
-| Pairwise | SciBERT (SciVocab) | 0.0271 | 0.0386 |
-| Pairwise | BERT Base | 0.0188 | 0.0245 |
-
-**Key observations:** All correlations are positive, confirming that pairs predicted as same-cluster genuinely have shorter expert graph distances. Magnitudes are small in absolute terms (Spearman ρ ≈ 0.02–0.10; point-biserial r ≈ 0.03–0.14) because the binary prediction is an extremely coarse compression of a continuous structural signal — a same-cluster decision collapses every shortest-path distance > 1 into a single category. Point-biserial r consistently exceeds Spearman ρ for the binary indicator, reflecting its parametric efficiency on a binary-vs-continuous pairing. Within each dataset the model ordering is stable across the three techniques, with All-MPNet-Base-v2 leading and BERT Base trailing.
+The diagnostic notebooks write all result tables to `analysis/results/elsst/` and `analysis/results/apa/` (primary performance with FPR and F1 at the reference prevalence, seed draws, stability, lexical trap, rare-word bias with and without overlap bands, semantic decay, structural alignment parts A and B, broader/narrower merge rates, bootstrap intervals and F1 differences, top-k recall and correct matches per reviewed candidates). Results of the initially submitted version are kept under the git tag `v1.0-submission`.
 
 ---
 
 ## 8. Design Decisions and Limitations
 
-- **Negative pair construction:** The negative pairs are sampled from the thesaurus graph, meaning they represent terms that co-exist in the same domain but are not designated as related. This is a harder task than random negative sampling and better reflects the realistic challenge of harmonisation.
-- **Seeded clustering sensitivity:** The seeded technique is more sensitive to both hyperparameter choice and embedding stability than the other two techniques, as evidenced by higher SEM values in the Embedding stability test. SciBERT and BERT under seeded clustering show very low F1 on APA (< 0.04), suggesting the technique requires high-quality semantic embeddings to work.
-- **Structural alignment interpretation:** Structural alignment correlations are reported on the convention "positive r = agreement with the expert ontology", with the binary same-cluster indicator correlated against expert proximity. Point-biserial r is the appropriate matched effect size for the genuine dichotomy; Spearman ρ provides a complementary rank-based view.
-- **No GPU used in reported runs:** All models were evaluated on CPU (PyTorch 2.9.1+cpu, CUDA = False), which affects inference speed but not correctness or reproducibility.
+- **Negative pair construction:** Negative pairs cover all label combinations of concepts that are not on the same family line. Broader/narrower pairs are excluded from the benchmark and evaluated separately, so F1 does not reflect how well a pipeline separates a concept from its parent.
+- **Thesaurus equivalence:** A correct match means that the thesaurus lists the two labels under one concept. This supports indexing; it does not establish that two constructs are theoretically interchangeable.
+- **Seeded clustering:** Its output depends on the drawn seeds; the variation over seed draws is reported next to the mean.
+- **Bootstrap scope:** The intervals reflect which concepts are in the evaluation set, not re-running the pipelines.
 
 ---
 

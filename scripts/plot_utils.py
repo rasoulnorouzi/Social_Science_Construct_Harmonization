@@ -27,6 +27,9 @@ MODEL_MAP = {
     "dwulff/mpnet-personality": "MPNet-Personality",
     "BERT Base": "BERT Base",
     "bert-base-uncased": "BERT Base",
+    # character n-gram baseline
+    "char-3gram": "Character 3-gram (baseline)",
+    "Character 3-gram (baseline)": "Character 3-gram (baseline)",
 }
 
 
