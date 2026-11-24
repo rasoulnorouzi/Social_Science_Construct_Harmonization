@@ -1,0 +1,38 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Precision, recall and F1 by data set, technique and model. 95\% intervals from 1,000 concept-level bootstrap samples (seeded clustering: mean over 10 seed draws, interval from the median draw). FP per 10,000: false positives per 10,000 non-synonym pairs. F1 at ELSST prevalence: precision recomputed with the class balance of the ELSST test split, recall and false-positive rate unchanged.}
+\label{tab:table1_primary_performance}
+\begin{tabular}{lllrrrrr}
+\toprule
+Dataset & Technique & Model & Precision & Recall & F1 [95\% CI] & FP per 10,000 & F1 at ELSST prevalence \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.513 & 0.503 & 0.508 [0.469, 0.549] & 4.23 & 0.508 \\
+ELSST & Clustering & MPNet-Personality & 0.481 & 0.492 & 0.487 [0.441, 0.527] & 4.70 & 0.487 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.372 & 0.292 & 0.327 [0.288, 0.370] & 4.38 & 0.327 \\
+ELSST & Clustering & BERT Base & 0.290 & 0.283 & 0.286 [0.248, 0.326] & 6.17 & 0.286 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.695 & 0.370 & 0.483 [0.438, 0.525] & 1.44 & 0.483 \\
+ELSST & Pairwise & MPNet-Personality & 0.653 & 0.347 & 0.453 [0.412, 0.494] & 1.64 & 0.453 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.354 & 0.220 & 0.272 [0.237, 0.306] & 3.57 & 0.272 \\
+ELSST & Pairwise & BERT Base & 0.273 & 0.114 & 0.161 [0.133, 0.191] & 2.68 & 0.161 \\
+ELSST & Pairwise & Character 3-gram (baseline) & 0.394 & 0.137 & 0.203 [0.174, 0.239] & 1.86 & 0.203 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.685 & 0.336 & 0.451 [0.400, 0.506] & 1.37 & 0.451 \\
+ELSST & Seeded & MPNet-Personality & 0.673 & 0.275 & 0.390 [0.349, 0.436] & 1.19 & 0.390 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.241 & 0.187 & 0.209 [0.178, 0.249] & 5.50 & 0.207 \\
+ELSST & Seeded & BERT Base & 0.190 & 0.138 & 0.159 [0.126, 0.191] & 5.45 & 0.158 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.320 & 0.395 & 0.354 [0.335, 0.372] & 0.78 & 0.533 \\
+APA & Clustering & MPNet-Personality & 0.324 & 0.396 & 0.356 [0.337, 0.375] & 0.77 & 0.534 \\
+APA & Clustering & SciBERT (SciVocab) & 0.134 & 0.189 & 0.157 [0.143, 0.169] & 1.14 & 0.287 \\
+APA & Clustering & BERT Base & 0.121 & 0.173 & 0.142 [0.130, 0.155] & 1.17 & 0.265 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.324 & 0.407 & 0.361 [0.343, 0.378] & 0.79 & 0.544 \\
+APA & Pairwise & MPNet-Personality & 0.328 & 0.374 & 0.350 [0.331, 0.366] & 0.71 & 0.514 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.017 & 0.195 & 0.031 [0.026, 0.036] & 10.58 & 0.163 \\
+APA & Pairwise & BERT Base & 0.032 & 0.096 & 0.048 [0.041, 0.058] & 2.69 & 0.137 \\
+APA & Pairwise & Character 3-gram (baseline) & 0.152 & 0.230 & 0.183 [0.169, 0.197] & 1.20 & 0.337 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.274 & 0.357 & 0.310 [0.285, 0.324] & 0.88 & 0.490 \\
+APA & Seeded & MPNet-Personality & 0.354 & 0.283 & 0.315 [0.294, 0.335] & 0.48 & 0.424 \\
+APA & Seeded & SciBERT (SciVocab) & 0.016 & 0.168 & 0.029 [0.027, 0.034] & 9.72 & 0.148 \\
+APA & Seeded & BERT Base & 0.015 & 0.103 & 0.026 [0.021, 0.030] & 6.61 & 0.111 \\
+\bottomrule
+\end{tabular}
+\end{table}

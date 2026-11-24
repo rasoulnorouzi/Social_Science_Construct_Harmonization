@@ -1,0 +1,38 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Structural alignment, part B. False-positive rate of each pipeline by thesaurus path length between the two concepts (none: not connected). Near-miss share: fraction of all false positives at path length 2.}
+\label{tab:table6b_structural_false_merges}
+\begin{tabular}{lllrrrrrrr}
+\toprule
+Dataset & Technique & Model & Path 2 & Path 3 & Path 4 & Path 5-6 & Path 7+ & Path none & Near-miss share \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.0553 & 0.0097 & 0.0031 & 0.0012 & 0.0002 & 0.0002 & 0.421 \\
+ELSST & Clustering & MPNet-Personality & 0.0437 & 0.0074 & 0.0032 & 0.0018 & 0.0003 & 0.0003 & 0.310 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.0437 & 0.0067 & 0.0034 & 0.0017 & 0.0002 & 0.0003 & 0.328 \\
+ELSST & Clustering & BERT Base & 0.0496 & 0.0106 & 0.0036 & 0.0014 & 0.0004 & 0.0005 & 0.284 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.0193 & 0.0044 & 0.0008 & 0.0005 & 0.0001 & 0.0001 & 0.451 \\
+ELSST & Pairwise & MPNet-Personality & 0.0196 & 0.0040 & 0.0012 & 0.0006 & 0.0001 & 0.0001 & 0.406 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.0317 & 0.0059 & 0.0022 & 0.0011 & 0.0002 & 0.0003 & 0.302 \\
+ELSST & Pairwise & BERT Base & 0.0111 & 0.0014 & 0.0007 & 0.0005 & 0.0002 & 0.0003 & 0.125 \\
+ELSST & Pairwise & Character 3-gram (baseline) & 0.0156 & 0.0029 & 0.0016 & 0.0006 & 0.0001 & 0.0001 & 0.303 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.0162 & 0.0047 & 0.0004 & 0.0004 & 0.0001 & 0.0001 & 0.427 \\
+ELSST & Seeded & MPNet-Personality & 0.0125 & 0.0034 & 0.0008 & 0.0004 & 0.0001 & 0.0001 & 0.380 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.0323 & 0.0052 & 0.0038 & 0.0018 & 0.0003 & 0.0004 & 0.228 \\
+ELSST & Seeded & BERT Base & 0.0164 & 0.0034 & 0.0010 & 0.0009 & 0.0004 & 0.0005 & 0.105 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.0097 & 0.0013 & 0.0004 & 0.0001 & 0.0000 & 0.0000 & 0.510 \\
+APA & Clustering & MPNet-Personality & 0.0078 & 0.0010 & 0.0003 & 0.0001 & 0.0000 & 0.0000 & 0.419 \\
+APA & Clustering & SciBERT (SciVocab) & 0.0157 & 0.0021 & 0.0007 & 0.0002 & 0.0000 & 0.0000 & 0.584 \\
+APA & Clustering & BERT Base & 0.0152 & 0.0021 & 0.0007 & 0.0002 & 0.0000 & 0.0000 & 0.553 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.0115 & 0.0014 & 0.0004 & 0.0001 & 0.0000 & 0.0000 & 0.573 \\
+APA & Pairwise & MPNet-Personality & 0.0085 & 0.0010 & 0.0003 & 0.0001 & 0.0000 & 0.0000 & 0.475 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.0280 & 0.0067 & 0.0041 & 0.0022 & 0.0007 & 0.0000 & 0.181 \\
+APA & Pairwise & BERT Base & 0.0118 & 0.0016 & 0.0010 & 0.0005 & 0.0002 & 0.0000 & 0.216 \\
+APA & Pairwise & Character 3-gram (baseline) & 0.0141 & 0.0026 & 0.0008 & 0.0002 & 0.0000 & 0.0000 & 0.557 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.0124 & 0.0016 & 0.0005 & 0.0001 & 0.0000 & 0.0000 & 0.570 \\
+APA & Seeded & MPNet-Personality & 0.0061 & 0.0008 & 0.0003 & 0.0001 & 0.0000 & 0.0000 & 0.509 \\
+APA & Seeded & SciBERT (SciVocab) & 0.0315 & 0.0087 & 0.0044 & 0.0017 & 0.0006 & 0.0003 & 0.234 \\
+APA & Seeded & BERT Base & 0.0224 & 0.0038 & 0.0022 & 0.0011 & 0.0005 & 0.0008 & 0.182 \\
+\bottomrule
+\end{tabular}
+\end{table}

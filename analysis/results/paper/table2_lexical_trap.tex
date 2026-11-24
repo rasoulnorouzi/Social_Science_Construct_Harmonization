@@ -1,0 +1,38 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Lexical trap test. False-positive rate on hard negatives (character 3-gram Jaccard > 0.5) and easy negatives (Jaccard = 0). N hard = 137 on ELSST and 3,018 on APA. The 3-gram baseline flags every hard negative by construction and is shown for reference.}
+\label{tab:table2_lexical_trap}
+\begin{tabular}{lllrrr}
+\toprule
+Dataset & Technique & Model & FPR (hard) & FPR (easy) & Delta FPR \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.2044 & 0.0002 & +0.204 \\
+ELSST & Clustering & MPNet-Personality & 0.2701 & 0.0001 & +0.270 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.1095 & 0.0002 & +0.109 \\
+ELSST & Clustering & BERT Base & 0.2482 & 0.0003 & +0.248 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.2482 & 0.0000 & +0.248 \\
+ELSST & Pairwise & MPNet-Personality & 0.2263 & 0.0000 & +0.226 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.1241 & 0.0001 & +0.124 \\
+ELSST & Pairwise & BERT Base & 0.0949 & 0.0002 & +0.095 \\
+ELSST & Pairwise & Character 3-gram (baseline) & 1.0000 & 0.0000 & +1.000 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.2044 & 0.0000 & +0.204 \\
+ELSST & Seeded & MPNet-Personality & 0.1971 & 0.0000 & +0.197 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.1460 & 0.0003 & +0.146 \\
+ELSST & Seeded & BERT Base & 0.1095 & 0.0005 & +0.109 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.1696 & 0.0000 & +0.170 \\
+APA & Clustering & MPNet-Personality & 0.1723 & 0.0000 & +0.172 \\
+APA & Clustering & SciBERT (SciVocab) & 0.2117 & 0.0000 & +0.212 \\
+APA & Clustering & BERT Base & 0.2005 & 0.0000 & +0.200 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.2290 & 0.0000 & +0.229 \\
+APA & Pairwise & MPNet-Personality & 0.2134 & 0.0000 & +0.213 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.2618 & 0.0007 & +0.261 \\
+APA & Pairwise & BERT Base & 0.1455 & 0.0002 & +0.145 \\
+APA & Pairwise & Character 3-gram (baseline) & 1.0000 & 0.0000 & +1.000 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.1670 & 0.0000 & +0.167 \\
+APA & Seeded & MPNet-Personality & 0.1388 & 0.0000 & +0.139 \\
+APA & Seeded & SciBERT (SciVocab) & 0.2319 & 0.0006 & +0.231 \\
+APA & Seeded & BERT Base & 0.1696 & 0.0006 & +0.169 \\
+\bottomrule
+\end{tabular}
+\end{table}

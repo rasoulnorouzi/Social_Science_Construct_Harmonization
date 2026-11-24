@@ -1,0 +1,22 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Recall@k: share of synonym pairs (both directions) whose synonym is among the k nearest terms (ties: expected value under random order). Correct in top N: synonym pairs among the N most similar benchmark pairs, as a curator reviewing a ranked list would see them.}
+\label{tab:S7_ranking}
+\begin{tabular}{llrrrrrr}
+\toprule
+Dataset & Model & Recall@1 & Recall@5 & Recall@10 & Correct in top 100 & Correct in top 500 & Correct in top 1,000 \\
+\midrule
+ELSST & All-MPNet-Base-v2 & 0.318 & 0.706 & 0.813 & 99 & 405 & 638 \\
+ELSST & MPNet-Personality & 0.313 & 0.695 & 0.796 & 99 & 379 & 611 \\
+ELSST & SciBERT (SciVocab) & 0.209 & 0.442 & 0.519 & 85 & 256 & 349 \\
+ELSST & BERT Base & 0.215 & 0.447 & 0.522 & 55 & 146 & 232 \\
+ELSST & Character 3-gram (baseline) & 0.161 & 0.375 & 0.473 & 72 & 205 & 293 \\
+APA & All-MPNet-Base-v2 & 0.313 & 0.593 & 0.677 & 94 & 443 & 791 \\
+APA & MPNet-Personality & 0.306 & 0.576 & 0.663 & 85 & 415 & 737 \\
+APA & SciBERT (SciVocab) & 0.151 & 0.317 & 0.379 & 26 & 89 & 151 \\
+APA & BERT Base & 0.146 & 0.310 & 0.372 & 47 & 114 & 150 \\
+APA & Character 3-gram (baseline) & 0.197 & 0.351 & 0.414 & 64 & 367 & 630 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,25 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Parameters selected by grid search on the ELSST training split (highest F1; seeded clustering: mean over trials) and the training-split scores. These values are fixed in scripts/config.py for all evaluations.}
+\label{tab:S2_calibration}
+\begin{tabular}{lllrrr}
+\toprule
+Technique & Model & Selected parameters & Precision & Recall & F1 \\
+\midrule
+Clustering & All-MPNet-Base-v2 & UMAP dims = none, min cluster size = 2, min samples = 2 & 0.462 & 0.418 & 0.439 \\
+Clustering & MPNet-Personality & UMAP dims = none, min cluster size = 2, min samples = 2 & 0.434 & 0.392 & 0.412 \\
+Clustering & SciBERT (SciVocab) & UMAP dims = none, min cluster size = 2, min samples = 2 & 0.269 & 0.231 & 0.249 \\
+Clustering & BERT Base & UMAP dims = none, min cluster size = 2, min samples = 2 & 0.302 & 0.213 & 0.250 \\
+Pairwise & All-MPNet-Base-v2 & threshold = 0.74 & 0.532 & 0.386 & 0.447 \\
+Pairwise & MPNet-Personality & threshold = 0.71 & 0.470 & 0.364 & 0.411 \\
+Pairwise & SciBERT (SciVocab) & threshold = 0.90 & 0.230 & 0.203 & 0.215 \\
+Pairwise & BERT Base & threshold = 0.91 & 0.123 & 0.108 & 0.115 \\
+Pairwise & Character 3-gram (baseline) & threshold = 0.45 & 0.248 & 0.160 & 0.195 \\
+Seeded & All-MPNet-Base-v2 & seeds = 250, threshold = 0.75 & 0.516 & 0.357 & 0.422 \\
+Seeded & MPNet-Personality & seeds = 10, threshold = 0.75 & 0.509 & 0.286 & 0.366 \\
+Seeded & SciBERT (SciVocab) & seeds = 500, threshold = 0.90 & 0.092 & 0.178 & 0.120 \\
+Seeded & BERT Base & seeds = 500, threshold = 0.90 & 0.048 & 0.126 & 0.069 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,38 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Share of broader/narrower pairs predicted as synonyms, by number of broader steps between the two concepts (depth 1 = direct parent). These pairs are not part of the benchmark. Pairs at depth 1 / 2 / 3+: APA 25,419 / 24,371 / 30,537; ELSST 986 / 684 / 852.}
+\label{tab:S5_broader_narrower}
+\begin{tabular}{lllrrrrr}
+\toprule
+Dataset & Technique & Model & Depth 1 & Depth 2 & Depth 3+ & All depths & FPR benchmark negatives \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.1572 & 0.0175 & 0.0035 & 0.0674 & 0.0004 \\
+ELSST & Clustering & MPNet-Personality & 0.1329 & 0.0278 & 0.0059 & 0.0615 & 0.0005 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.0700 & 0.0073 & 0.0000 & 0.0293 & 0.0004 \\
+ELSST & Clustering & BERT Base & 0.0822 & 0.0219 & 0.0023 & 0.0389 & 0.0006 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.0984 & 0.0058 & 0.0012 & 0.0404 & 0.0001 \\
+ELSST & Pairwise & MPNet-Personality & 0.0842 & 0.0015 & 0.0012 & 0.0337 & 0.0002 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.0517 & 0.0044 & 0.0012 & 0.0218 & 0.0004 \\
+ELSST & Pairwise & BERT Base & 0.0274 & 0.0058 & 0.0000 & 0.0123 & 0.0003 \\
+ELSST & Pairwise & Character 3-gram (baseline) & 0.0588 & 0.0219 & 0.0153 & 0.0341 & 0.0002 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.0923 & 0.0102 & 0.0012 & 0.0393 & 0.0001 \\
+ELSST & Seeded & MPNet-Personality & 0.0568 & 0.0044 & 0.0000 & 0.0234 & 0.0001 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.0477 & 0.0088 & 0.0047 & 0.0226 & 0.0005 \\
+ELSST & Seeded & BERT Base & 0.0456 & 0.0117 & 0.0012 & 0.0214 & 0.0005 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.0607 & 0.0080 & 0.0014 & 0.0222 & 0.0001 \\
+APA & Clustering & MPNet-Personality & 0.0567 & 0.0059 & 0.0007 & 0.0200 & 0.0001 \\
+APA & Clustering & SciBERT (SciVocab) & 0.0416 & 0.0047 & 0.0009 & 0.0149 & 0.0001 \\
+APA & Clustering & BERT Base & 0.0345 & 0.0040 & 0.0007 & 0.0124 & 0.0001 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.0759 & 0.0104 & 0.0013 & 0.0277 & 0.0001 \\
+APA & Pairwise & MPNet-Personality & 0.0668 & 0.0082 & 0.0011 & 0.0240 & 0.0001 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.0554 & 0.0080 & 0.0021 & 0.0207 & 0.0011 \\
+APA & Pairwise & BERT Base & 0.0208 & 0.0027 & 0.0006 & 0.0076 & 0.0003 \\
+APA & Pairwise & Character 3-gram (baseline) & 0.0718 & 0.0176 & 0.0053 & 0.0300 & 0.0001 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.0623 & 0.0094 & 0.0017 & 0.0232 & 0.0001 \\
+APA & Seeded & MPNet-Personality & 0.0408 & 0.0057 & 0.0007 & 0.0149 & 0.0001 \\
+APA & Seeded & SciBERT (SciVocab) & 0.0571 & 0.0123 & 0.0043 & 0.0234 & 0.0009 \\
+APA & Seeded & BERT Base & 0.0299 & 0.0073 & 0.0017 & 0.0123 & 0.0007 \\
+\bottomrule
+\end{tabular}
+\end{table}

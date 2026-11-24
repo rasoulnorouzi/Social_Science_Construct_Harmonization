@@ -1,0 +1,17 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Structural alignment, part A. Spearman rho between similarity (cosine; Jaccard for the baseline) and thesaurus path length among non-synonym pairs with a path (length >= 2). A negative rho means that similarity falls as concepts are further apart. Pairs: 819,534 on ELSST and 59,534,803 on APA (rho on a fixed random sample of 5 million pairs).}
+\label{tab:table6a_structural_similarity}
+\begin{tabular}{lrr}
+\toprule
+Model & rho ELSST & rho APA \\
+\midrule
+All-MPNet-Base-v2 & -0.221 & -0.249 \\
+MPNet-Personality & -0.134 & -0.162 \\
+SciBERT (SciVocab) & -0.150 & -0.174 \\
+BERT Base & -0.180 & -0.275 \\
+Character 3-gram (baseline) & -0.029 & -0.085 \\
+\bottomrule
+\end{tabular}
+\end{table}

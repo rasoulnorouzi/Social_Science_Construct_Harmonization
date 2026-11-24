@@ -1,0 +1,36 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Embedding stability test. Gaussian noise added to the embeddings, 10 runs per noise level. Delta F1: mean change from the noise-free run. Agreement: Jaccard overlap between the predicted synonym pairs of a noisy run and of the noise-free run. Seeded clustering at sigma = 0 varies only the seed draw (10 draws); at sigma > 0 the seed draw is fixed. All noise levels are in Supplementary Table S3.}
+\label{tab:table4_embedding_stability}
+\begin{tabular}{lllrrrrrr}
+\toprule
+Dataset & Technique & Model & F1 (sigma = 0) & SD over seed draws & F1 (sigma = 0.30) & SD (sigma = 0.30) & Delta F1 (sigma = 0.30) & Agreement (sigma = 0.30) \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.508 &  & 0.507 & 0.008 & -0.001 & 0.818 \\
+ELSST & Clustering & MPNet-Personality & 0.487 &  & 0.478 & 0.004 & -0.009 & 0.819 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.327 &  & 0.304 & 0.029 & -0.024 & 0.655 \\
+ELSST & Clustering & BERT Base & 0.286 &  & 0.274 & 0.086 & -0.012 & 0.548 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.483 &  & 0.382 & 0.002 & -0.100 & 0.576 \\
+ELSST & Pairwise & MPNet-Personality & 0.453 &  & 0.374 & 0.003 & -0.079 & 0.629 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.272 &  & 0.213 & 0.003 & -0.059 & 0.305 \\
+ELSST & Pairwise & BERT Base & 0.161 &  & 0.058 & 0.003 & -0.102 & 0.108 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.451 & 0.012 & 0.367 & 0.006 & -0.100 & 0.529 \\
+ELSST & Seeded & MPNet-Personality & 0.390 & 0.008 & 0.299 & 0.005 & -0.093 & 0.547 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.209 & 0.020 & 0.198 & 0.005 & -0.018 & 0.283 \\
+ELSST & Seeded & BERT Base & 0.159 & 0.015 & 0.070 & 0.003 & -0.098 & 0.172 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.354 &  & 0.354 & 0.005 & 0.001 & 0.776 \\
+APA & Clustering & MPNet-Personality & 0.356 &  & 0.342 & 0.002 & -0.015 & 0.767 \\
+APA & Clustering & SciBERT (SciVocab) & 0.157 &  & 0.150 & 0.003 & -0.006 & 0.705 \\
+APA & Clustering & BERT Base & 0.142 &  & 0.124 & 0.024 & -0.018 & 0.596 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.361 &  & 0.370 & 0.002 & 0.009 & 0.451 \\
+APA & Pairwise & MPNet-Personality & 0.350 &  & 0.346 & 0.001 & -0.004 & 0.503 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.031 &  & 0.090 & 0.001 & 0.059 & 0.125 \\
+APA & Pairwise & BERT Base & 0.048 &  & 0.050 & 0.001 & 0.002 & 0.044 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.310 & 0.009 & 0.335 & 0.003 & 0.016 & 0.420 \\
+APA & Seeded & MPNet-Personality & 0.315 & 0.006 & 0.295 & 0.003 & -0.027 & 0.478 \\
+APA & Seeded & SciBERT (SciVocab) & 0.029 & 0.004 & 0.014 & 0.001 & -0.019 & 0.122 \\
+APA & Seeded & BERT Base & 0.026 & 0.004 & 0.015 & 0.002 & -0.019 & 0.173 \\
+\bottomrule
+\end{tabular}
+\end{table}

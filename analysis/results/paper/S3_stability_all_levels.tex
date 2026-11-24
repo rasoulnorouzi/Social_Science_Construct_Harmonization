@@ -1,0 +1,132 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Embedding stability at every noise level. Agreement: Jaccard overlap of predicted synonym pairs with the noise-free run.}
+\label{tab:S3_stability_all_levels}
+\begin{tabular}{lllrlrrrrrr}
+\toprule
+Dataset & Technique & Model & Sigma & Variation & Runs & Mean F1 & SD F1 & Delta F1 & Mean agreement & Min agreement \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.0 & none (deterministic) & 1 & 0.508 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Clustering & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.503 & 0.005 & -0.005 & 0.951 & 0.929 \\
+ELSST & Clustering & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.505 & 0.005 & -0.003 & 0.927 & 0.907 \\
+ELSST & Clustering & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.502 & 0.007 & -0.006 & 0.875 & 0.863 \\
+ELSST & Clustering & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.507 & 0.008 & -0.001 & 0.818 & 0.800 \\
+ELSST & Clustering & MPNet-Personality & 0.0 & none (deterministic) & 1 & 0.487 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Clustering & MPNet-Personality & 0.05 & embedding noise & 10 & 0.485 & 0.003 & -0.002 & 0.964 & 0.934 \\
+ELSST & Clustering & MPNet-Personality & 0.1 & embedding noise & 10 & 0.483 & 0.004 & -0.004 & 0.933 & 0.892 \\
+ELSST & Clustering & MPNet-Personality & 0.2 & embedding noise & 10 & 0.481 & 0.004 & -0.006 & 0.878 & 0.866 \\
+ELSST & Clustering & MPNet-Personality & 0.3 & embedding noise & 10 & 0.478 & 0.004 & -0.009 & 0.819 & 0.761 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.0 & none (deterministic) & 1 & 0.327 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.324 & 0.003 & -0.003 & 0.939 & 0.914 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.322 & 0.004 & -0.005 & 0.889 & 0.849 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.317 & 0.006 & -0.010 & 0.783 & 0.744 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.304 & 0.029 & -0.024 & 0.655 & 0.459 \\
+ELSST & Clustering & BERT Base & 0.0 & none (deterministic) & 1 & 0.286 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Clustering & BERT Base & 0.05 & embedding noise & 10 & 0.293 & 0.008 & 0.007 & 0.919 & 0.801 \\
+ELSST & Clustering & BERT Base & 0.1 & embedding noise & 10 & 0.297 & 0.008 & 0.010 & 0.864 & 0.774 \\
+ELSST & Clustering & BERT Base & 0.2 & embedding noise & 10 & 0.284 & 0.066 & -0.002 & 0.663 & 0.210 \\
+ELSST & Clustering & BERT Base & 0.3 & embedding noise & 10 & 0.274 & 0.086 & -0.012 & 0.548 & 0.186 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.0 & none (deterministic) & 1 & 0.483 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.480 & 0.002 & -0.003 & 0.979 & 0.975 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.473 & 0.002 & -0.009 & 0.944 & 0.934 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.440 & 0.002 & -0.043 & 0.794 & 0.780 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.382 & 0.002 & -0.100 & 0.576 & 0.568 \\
+ELSST & Pairwise & MPNet-Personality & 0.0 & none (deterministic) & 1 & 0.453 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Pairwise & MPNet-Personality & 0.05 & embedding noise & 10 & 0.452 & 0.001 & -0.001 & 0.984 & 0.977 \\
+ELSST & Pairwise & MPNet-Personality & 0.1 & embedding noise & 10 & 0.445 & 0.001 & -0.008 & 0.946 & 0.938 \\
+ELSST & Pairwise & MPNet-Personality & 0.2 & embedding noise & 10 & 0.416 & 0.003 & -0.038 & 0.806 & 0.796 \\
+ELSST & Pairwise & MPNet-Personality & 0.3 & embedding noise & 10 & 0.374 & 0.003 & -0.079 & 0.629 & 0.619 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.0 & none (deterministic) & 1 & 0.272 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.272 & 0.001 & 0.000 & 0.960 & 0.956 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.272 & 0.002 & 0.001 & 0.878 & 0.869 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.259 & 0.004 & -0.012 & 0.588 & 0.580 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.213 & 0.003 & -0.059 & 0.305 & 0.287 \\
+ELSST & Pairwise & BERT Base & 0.0 & none (deterministic) & 1 & 0.161 & 0.000 & 0.000 & 1.000 & 1.000 \\
+ELSST & Pairwise & BERT Base & 0.05 & embedding noise & 10 & 0.158 & 0.002 & -0.003 & 0.940 & 0.926 \\
+ELSST & Pairwise & BERT Base & 0.1 & embedding noise & 10 & 0.149 & 0.003 & -0.012 & 0.810 & 0.802 \\
+ELSST & Pairwise & BERT Base & 0.2 & embedding noise & 10 & 0.110 & 0.002 & -0.051 & 0.396 & 0.381 \\
+ELSST & Pairwise & BERT Base & 0.3 & embedding noise & 10 & 0.058 & 0.003 & -0.102 & 0.108 & 0.099 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.0 & seed draws & 10 & 0.451 & 0.012 & -0.017 & 0.677 & 0.615 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.465 & 0.003 & -0.002 & 0.982 & 0.977 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.456 & 0.004 & -0.011 & 0.938 & 0.905 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.421 & 0.002 & -0.046 & 0.704 & 0.687 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.367 & 0.006 & -0.100 & 0.529 & 0.511 \\
+ELSST & Seeded & MPNet-Personality & 0.0 & seed draws & 10 & 0.390 & 0.008 & -0.002 & 0.764 & 0.734 \\
+ELSST & Seeded & MPNet-Personality & 0.05 & embedding noise & 10 & 0.388 & 0.002 & -0.004 & 0.974 & 0.956 \\
+ELSST & Seeded & MPNet-Personality & 0.1 & embedding noise & 10 & 0.379 & 0.002 & -0.013 & 0.930 & 0.910 \\
+ELSST & Seeded & MPNet-Personality & 0.2 & embedding noise & 10 & 0.351 & 0.004 & -0.042 & 0.763 & 0.751 \\
+ELSST & Seeded & MPNet-Personality & 0.3 & embedding noise & 10 & 0.299 & 0.005 & -0.093 & 0.547 & 0.523 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.0 & seed draws & 10 & 0.209 & 0.020 & -0.008 & 0.289 & 0.239 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.213 & 0.003 & -0.003 & 0.890 & 0.737 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.209 & 0.005 & -0.007 & 0.764 & 0.642 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.217 & 0.005 & 0.001 & 0.457 & 0.427 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.198 & 0.005 & -0.018 & 0.283 & 0.262 \\
+ELSST & Seeded & BERT Base & 0.0 & seed draws & 10 & 0.159 & 0.015 & -0.009 & 0.236 & 0.200 \\
+ELSST & Seeded & BERT Base & 0.05 & embedding noise & 10 & 0.159 & 0.005 & -0.010 & 0.730 & 0.495 \\
+ELSST & Seeded & BERT Base & 0.1 & embedding noise & 10 & 0.151 & 0.005 & -0.017 & 0.574 & 0.375 \\
+ELSST & Seeded & BERT Base & 0.2 & embedding noise & 10 & 0.111 & 0.005 & -0.057 & 0.391 & 0.289 \\
+ELSST & Seeded & BERT Base & 0.3 & embedding noise & 10 & 0.070 & 0.003 & -0.098 & 0.172 & 0.137 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.0 & none (deterministic) & 1 & 0.354 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.354 & 0.002 & -0.000 & 0.963 & 0.955 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.354 & 0.001 & 0.001 & 0.927 & 0.920 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.354 & 0.005 & -0.000 & 0.845 & 0.808 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.354 & 0.005 & 0.001 & 0.776 & 0.737 \\
+APA & Clustering & MPNet-Personality & 0.0 & none (deterministic) & 1 & 0.356 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Clustering & MPNet-Personality & 0.05 & embedding noise & 10 & 0.353 & 0.001 & -0.003 & 0.958 & 0.952 \\
+APA & Clustering & MPNet-Personality & 0.1 & embedding noise & 10 & 0.351 & 0.002 & -0.005 & 0.918 & 0.901 \\
+APA & Clustering & MPNet-Personality & 0.2 & embedding noise & 10 & 0.348 & 0.002 & -0.009 & 0.850 & 0.836 \\
+APA & Clustering & MPNet-Personality & 0.3 & embedding noise & 10 & 0.342 & 0.002 & -0.015 & 0.767 & 0.748 \\
+APA & Clustering & SciBERT (SciVocab) & 0.0 & none (deterministic) & 1 & 0.157 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Clustering & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.158 & 0.002 & 0.002 & 0.938 & 0.921 \\
+APA & Clustering & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.157 & 0.002 & 0.000 & 0.893 & 0.859 \\
+APA & Clustering & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.156 & 0.002 & -0.001 & 0.792 & 0.759 \\
+APA & Clustering & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.150 & 0.003 & -0.006 & 0.705 & 0.683 \\
+APA & Clustering & BERT Base & 0.0 & none (deterministic) & 1 & 0.142 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Clustering & BERT Base & 0.05 & embedding noise & 10 & 0.139 & 0.006 & -0.003 & 0.911 & 0.795 \\
+APA & Clustering & BERT Base & 0.1 & embedding noise & 10 & 0.139 & 0.007 & -0.003 & 0.858 & 0.713 \\
+APA & Clustering & BERT Base & 0.2 & embedding noise & 10 & 0.137 & 0.007 & -0.005 & 0.755 & 0.656 \\
+APA & Clustering & BERT Base & 0.3 & embedding noise & 10 & 0.124 & 0.024 & -0.018 & 0.596 & 0.235 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.0 & none (deterministic) & 1 & 0.361 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.363 & 0.001 & 0.002 & 0.971 & 0.968 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.367 & 0.001 & 0.007 & 0.910 & 0.909 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.378 & 0.002 & 0.017 & 0.693 & 0.690 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.370 & 0.002 & 0.009 & 0.451 & 0.450 \\
+APA & Pairwise & MPNet-Personality & 0.0 & none (deterministic) & 1 & 0.350 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Pairwise & MPNet-Personality & 0.05 & embedding noise & 10 & 0.350 & 0.001 & 0.000 & 0.975 & 0.971 \\
+APA & Pairwise & MPNet-Personality & 0.1 & embedding noise & 10 & 0.352 & 0.001 & 0.003 & 0.924 & 0.923 \\
+APA & Pairwise & MPNet-Personality & 0.2 & embedding noise & 10 & 0.357 & 0.001 & 0.008 & 0.734 & 0.730 \\
+APA & Pairwise & MPNet-Personality & 0.3 & embedding noise & 10 & 0.346 & 0.001 & -0.004 & 0.503 & 0.498 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.0 & none (deterministic) & 1 & 0.031 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.032 & 0.000 & 0.001 & 0.947 & 0.945 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.036 & 0.000 & 0.004 & 0.817 & 0.813 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.053 & 0.000 & 0.022 & 0.425 & 0.420 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.090 & 0.001 & 0.059 & 0.125 & 0.122 \\
+APA & Pairwise & BERT Base & 0.0 & none (deterministic) & 1 & 0.048 & 0.000 & 0.000 & 1.000 & 1.000 \\
+APA & Pairwise & BERT Base & 0.05 & embedding noise & 10 & 0.049 & 0.000 & 0.001 & 0.933 & 0.926 \\
+APA & Pairwise & BERT Base & 0.1 & embedding noise & 10 & 0.052 & 0.001 & 0.004 & 0.770 & 0.760 \\
+APA & Pairwise & BERT Base & 0.2 & embedding noise & 10 & 0.061 & 0.001 & 0.013 & 0.313 & 0.309 \\
+APA & Pairwise & BERT Base & 0.3 & embedding noise & 10 & 0.050 & 0.001 & 0.002 & 0.044 & 0.042 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.0 & seed draws & 10 & 0.310 & 0.009 & -0.009 & 0.446 & 0.418 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.05 & embedding noise & 10 & 0.321 & 0.001 & 0.003 & 0.921 & 0.888 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.1 & embedding noise & 10 & 0.325 & 0.002 & 0.006 & 0.818 & 0.799 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.2 & embedding noise & 10 & 0.336 & 0.003 & 0.017 & 0.613 & 0.606 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.3 & embedding noise & 10 & 0.335 & 0.003 & 0.016 & 0.420 & 0.409 \\
+APA & Seeded & MPNet-Personality & 0.0 & seed draws & 10 & 0.315 & 0.006 & -0.006 & 0.569 & 0.553 \\
+APA & Seeded & MPNet-Personality & 0.05 & embedding noise & 10 & 0.321 & 0.001 & -0.000 & 0.971 & 0.958 \\
+APA & Seeded & MPNet-Personality & 0.1 & embedding noise & 10 & 0.322 & 0.001 & 0.001 & 0.898 & 0.888 \\
+APA & Seeded & MPNet-Personality & 0.2 & embedding noise & 10 & 0.317 & 0.002 & -0.005 & 0.702 & 0.693 \\
+APA & Seeded & MPNet-Personality & 0.3 & embedding noise & 10 & 0.295 & 0.003 & -0.027 & 0.478 & 0.471 \\
+APA & Seeded & SciBERT (SciVocab) & 0.0 & seed draws & 10 & 0.029 & 0.004 & -0.004 & 0.194 & 0.171 \\
+APA & Seeded & SciBERT (SciVocab) & 0.05 & embedding noise & 10 & 0.033 & 0.002 & 0.000 & 0.574 & 0.467 \\
+APA & Seeded & SciBERT (SciVocab) & 0.1 & embedding noise & 10 & 0.031 & 0.002 & -0.002 & 0.423 & 0.323 \\
+APA & Seeded & SciBERT (SciVocab) & 0.2 & embedding noise & 10 & 0.025 & 0.002 & -0.008 & 0.254 & 0.218 \\
+APA & Seeded & SciBERT (SciVocab) & 0.3 & embedding noise & 10 & 0.014 & 0.001 & -0.019 & 0.122 & 0.114 \\
+APA & Seeded & BERT Base & 0.0 & seed draws & 10 & 0.026 & 0.004 & -0.008 & 0.247 & 0.200 \\
+APA & Seeded & BERT Base & 0.05 & embedding noise & 10 & 0.034 & 0.002 & -0.000 & 0.600 & 0.495 \\
+APA & Seeded & BERT Base & 0.1 & embedding noise & 10 & 0.030 & 0.001 & -0.004 & 0.505 & 0.458 \\
+APA & Seeded & BERT Base & 0.2 & embedding noise & 10 & 0.024 & 0.001 & -0.010 & 0.304 & 0.265 \\
+APA & Seeded & BERT Base & 0.3 & embedding noise & 10 & 0.015 & 0.002 & -0.019 & 0.173 & 0.141 \\
+\bottomrule
+\end{tabular}
+\end{table}

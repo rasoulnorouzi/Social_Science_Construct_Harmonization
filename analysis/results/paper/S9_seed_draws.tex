@@ -1,0 +1,20 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Seeded clustering over 10 random seed draws (seeds sampled uniformly from all terms, no gold information).}
+\label{tab:S9_seed_draws}
+\begin{tabular}{llrrrr}
+\toprule
+Dataset & Model & Mean F1 & SD F1 & Min F1 & Max F1 \\
+\midrule
+ELSST & All-MPNet-Base-v2 & 0.451 & 0.012 & 0.424 & 0.467 \\
+ELSST & MPNet-Personality & 0.390 & 0.008 & 0.377 & 0.406 \\
+ELSST & SciBERT (SciVocab) & 0.209 & 0.020 & 0.181 & 0.231 \\
+ELSST & BERT Base & 0.159 & 0.015 & 0.139 & 0.184 \\
+APA & All-MPNet-Base-v2 & 0.310 & 0.009 & 0.299 & 0.322 \\
+APA & MPNet-Personality & 0.315 & 0.006 & 0.306 & 0.322 \\
+APA & SciBERT (SciVocab) & 0.029 & 0.004 & 0.023 & 0.034 \\
+APA & BERT Base & 0.026 & 0.004 & 0.019 & 0.034 \\
+\bottomrule
+\end{tabular}
+\end{table}

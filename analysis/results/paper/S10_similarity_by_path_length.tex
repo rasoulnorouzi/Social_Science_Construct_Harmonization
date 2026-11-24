@@ -1,0 +1,22 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Mean similarity of non-synonym pairs by thesaurus path length (cosine; Jaccard for the baseline).}
+\label{tab:S10_similarity_by_path_length}
+\begin{tabular}{llrrrrr}
+\toprule
+Dataset & Model & 2 & 3 & 4 & 5-6 & 7+ \\
+\midrule
+ELSST & All-MPNet-Base-v2 & 0.422 & 0.326 & 0.272 & 0.223 & 0.152 \\
+ELSST & MPNet-Personality & 0.342 & 0.245 & 0.201 & 0.164 & 0.118 \\
+ELSST & SciBERT (SciVocab) & 0.761 & 0.732 & 0.721 & 0.705 & 0.682 \\
+ELSST & BERT Base & 0.703 & 0.665 & 0.649 & 0.640 & 0.606 \\
+ELSST & Character 3-gram (baseline) & 0.090 & 0.036 & 0.027 & 0.020 & 0.012 \\
+APA & All-MPNet-Base-v2 & 0.368 & 0.290 & 0.238 & 0.180 & 0.124 \\
+APA & MPNet-Personality & 0.292 & 0.222 & 0.179 & 0.138 & 0.109 \\
+APA & SciBERT (SciVocab) & 0.747 & 0.719 & 0.705 & 0.688 & 0.667 \\
+APA & BERT Base & 0.672 & 0.640 & 0.624 & 0.605 & 0.561 \\
+APA & Character 3-gram (baseline) & 0.078 & 0.035 & 0.021 & 0.015 & 0.010 \\
+\bottomrule
+\end{tabular}
+\end{table}

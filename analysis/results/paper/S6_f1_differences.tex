@@ -1,0 +1,168 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Paired F1 differences between pipelines with 95\% concept-level bootstrap intervals (same 1,000 samples for every pipeline). An interval that excludes 0 marks a difference beyond concept sampling variation.}
+\label{tab:S6_f1_differences}
+\begin{tabular}{lllrrrr}
+\toprule
+Dataset & Pipeline A & Pipeline B & F1 difference (A - B) & CI low & CI high & Share of samples A better \\
+\midrule
+ELSST & clustering | All-MPNet-Base-v2 & clustering | MPNet-Personality & 0.021 & -0.017 & 0.059 & 0.859 \\
+ELSST & clustering | All-MPNet-Base-v2 & clustering | SciBERT (SciVocab) & 0.181 & 0.136 & 0.226 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & clustering | BERT Base & 0.222 & 0.175 & 0.269 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & pairwise | All-MPNet-Base-v2 & 0.025 & -0.015 & 0.065 & 0.885 \\
+ELSST & clustering | All-MPNet-Base-v2 & pairwise | MPNet-Personality & 0.054 & 0.017 & 0.096 & 0.997 \\
+ELSST & clustering | All-MPNet-Base-v2 & pairwise | SciBERT (SciVocab) & 0.236 & 0.193 & 0.280 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & pairwise | BERT Base & 0.347 & 0.302 & 0.393 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & pairwise | Character 3-gram (baseline) & 0.305 & 0.259 & 0.350 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & seeded | All-MPNet-Base-v2 & 0.057 & 0.012 & 0.102 & 0.988 \\
+ELSST & clustering | All-MPNet-Base-v2 & seeded | MPNet-Personality & 0.116 & 0.068 & 0.164 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.296 & 0.251 & 0.341 & 1.000 \\
+ELSST & clustering | All-MPNet-Base-v2 & seeded | BERT Base & 0.352 & 0.303 & 0.399 & 1.000 \\
+ELSST & clustering | MPNet-Personality & clustering | SciBERT (SciVocab) & 0.159 & 0.111 & 0.207 & 1.000 \\
+ELSST & clustering | MPNet-Personality & clustering | BERT Base & 0.200 & 0.149 & 0.252 & 1.000 \\
+ELSST & clustering | MPNet-Personality & pairwise | All-MPNet-Base-v2 & 0.004 & -0.038 & 0.044 & 0.568 \\
+ELSST & clustering | MPNet-Personality & pairwise | MPNet-Personality & 0.033 & -0.002 & 0.069 & 0.966 \\
+ELSST & clustering | MPNet-Personality & pairwise | SciBERT (SciVocab) & 0.215 & 0.168 & 0.260 & 1.000 \\
+ELSST & clustering | MPNet-Personality & pairwise | BERT Base & 0.326 & 0.276 & 0.372 & 1.000 \\
+ELSST & clustering | MPNet-Personality & pairwise | Character 3-gram (baseline) & 0.284 & 0.235 & 0.329 & 1.000 \\
+ELSST & clustering | MPNet-Personality & seeded | All-MPNet-Base-v2 & 0.035 & -0.015 & 0.082 & 0.922 \\
+ELSST & clustering | MPNet-Personality & seeded | MPNet-Personality & 0.095 & 0.053 & 0.134 & 1.000 \\
+ELSST & clustering | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.275 & 0.227 & 0.324 & 1.000 \\
+ELSST & clustering | MPNet-Personality & seeded | BERT Base & 0.330 & 0.280 & 0.378 & 1.000 \\
+ELSST & clustering | SciBERT (SciVocab) & clustering | BERT Base & 0.041 & -0.005 & 0.087 & 0.957 \\
+ELSST & clustering | SciBERT (SciVocab) & pairwise | All-MPNet-Base-v2 & -0.156 & -0.195 & -0.117 & 0.000 \\
+ELSST & clustering | SciBERT (SciVocab) & pairwise | MPNet-Personality & -0.126 & -0.166 & -0.085 & 0.000 \\
+ELSST & clustering | SciBERT (SciVocab) & pairwise | SciBERT (SciVocab) & 0.056 & 0.029 & 0.084 & 1.000 \\
+ELSST & clustering | SciBERT (SciVocab) & pairwise | BERT Base & 0.167 & 0.125 & 0.211 & 1.000 \\
+ELSST & clustering | SciBERT (SciVocab) & pairwise | Character 3-gram (baseline) & 0.124 & 0.082 & 0.167 & 1.000 \\
+ELSST & clustering | SciBERT (SciVocab) & seeded | All-MPNet-Base-v2 & -0.124 & -0.170 & -0.084 & 0.000 \\
+ELSST & clustering | SciBERT (SciVocab) & seeded | MPNet-Personality & -0.065 & -0.111 & -0.018 & 0.001 \\
+ELSST & clustering | SciBERT (SciVocab) & seeded | SciBERT (SciVocab) & 0.116 & 0.080 & 0.150 & 1.000 \\
+ELSST & clustering | SciBERT (SciVocab) & seeded | BERT Base & 0.171 & 0.126 & 0.215 & 1.000 \\
+ELSST & clustering | BERT Base & pairwise | All-MPNet-Base-v2 & -0.196 & -0.244 & -0.145 & 0.000 \\
+ELSST & clustering | BERT Base & pairwise | MPNet-Personality & -0.167 & -0.214 & -0.119 & 0.000 \\
+ELSST & clustering | BERT Base & pairwise | SciBERT (SciVocab) & 0.015 & -0.024 & 0.059 & 0.778 \\
+ELSST & clustering | BERT Base & pairwise | BERT Base & 0.126 & 0.099 & 0.161 & 1.000 \\
+ELSST & clustering | BERT Base & pairwise | Character 3-gram (baseline) & 0.083 & 0.039 & 0.133 & 1.000 \\
+ELSST & clustering | BERT Base & seeded | All-MPNet-Base-v2 & -0.165 & -0.221 & -0.110 & 0.000 \\
+ELSST & clustering | BERT Base & seeded | MPNet-Personality & -0.105 & -0.156 & -0.053 & 0.000 \\
+ELSST & clustering | BERT Base & seeded | SciBERT (SciVocab) & 0.075 & 0.036 & 0.119 & 1.000 \\
+ELSST & clustering | BERT Base & seeded | BERT Base & 0.130 & 0.096 & 0.170 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & pairwise | MPNet-Personality & 0.029 & 0.005 & 0.055 & 0.991 \\
+ELSST & pairwise | All-MPNet-Base-v2 & pairwise | SciBERT (SciVocab) & 0.211 & 0.177 & 0.251 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & pairwise | BERT Base & 0.322 & 0.277 & 0.368 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & pairwise | Character 3-gram (baseline) & 0.280 & 0.238 & 0.320 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & seeded | All-MPNet-Base-v2 & 0.031 & 0.009 & 0.055 & 0.994 \\
+ELSST & pairwise | All-MPNet-Base-v2 & seeded | MPNet-Personality & 0.091 & 0.061 & 0.122 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.271 & 0.231 & 0.318 & 1.000 \\
+ELSST & pairwise | All-MPNet-Base-v2 & seeded | BERT Base & 0.327 & 0.282 & 0.374 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & pairwise | SciBERT (SciVocab) & 0.182 & 0.149 & 0.222 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & pairwise | BERT Base & 0.293 & 0.250 & 0.339 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & pairwise | Character 3-gram (baseline) & 0.250 & 0.212 & 0.291 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & seeded | All-MPNet-Base-v2 & 0.002 & -0.029 & 0.034 & 0.533 \\
+ELSST & pairwise | MPNet-Personality & seeded | MPNet-Personality & 0.062 & 0.039 & 0.084 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.242 & 0.200 & 0.286 & 1.000 \\
+ELSST & pairwise | MPNet-Personality & seeded | BERT Base & 0.297 & 0.254 & 0.344 & 1.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & pairwise | BERT Base & 0.111 & 0.073 & 0.149 & 1.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & pairwise | Character 3-gram (baseline) & 0.068 & 0.029 & 0.106 & 1.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & seeded | All-MPNet-Base-v2 & -0.180 & -0.224 & -0.140 & 0.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & seeded | MPNet-Personality & -0.120 & -0.166 & -0.079 & 0.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & seeded | SciBERT (SciVocab) & 0.060 & 0.036 & 0.084 & 1.000 \\
+ELSST & pairwise | SciBERT (SciVocab) & seeded | BERT Base & 0.115 & 0.075 & 0.152 & 1.000 \\
+ELSST & pairwise | BERT Base & pairwise | Character 3-gram (baseline) & -0.043 & -0.081 & -0.006 & 0.009 \\
+ELSST & pairwise | BERT Base & seeded | All-MPNet-Base-v2 & -0.291 & -0.344 & -0.239 & 0.000 \\
+ELSST & pairwise | BERT Base & seeded | MPNet-Personality & -0.231 & -0.278 & -0.186 & 0.000 \\
+ELSST & pairwise | BERT Base & seeded | SciBERT (SciVocab) & -0.051 & -0.090 & -0.011 & 0.003 \\
+ELSST & pairwise | BERT Base & seeded | BERT Base & 0.004 & -0.022 & 0.031 & 0.591 \\
+ELSST & pairwise | Character 3-gram (baseline) & seeded | All-MPNet-Base-v2 & -0.248 & -0.297 & -0.198 & 0.000 \\
+ELSST & pairwise | Character 3-gram (baseline) & seeded | MPNet-Personality & -0.189 & -0.229 & -0.147 & 0.000 \\
+ELSST & pairwise | Character 3-gram (baseline) & seeded | SciBERT (SciVocab) & -0.008 & -0.051 & 0.036 & 0.352 \\
+ELSST & pairwise | Character 3-gram (baseline) & seeded | BERT Base & 0.047 & 0.007 & 0.087 & 0.992 \\
+ELSST & seeded | All-MPNet-Base-v2 & seeded | MPNet-Personality & 0.060 & 0.025 & 0.094 & 0.999 \\
+ELSST & seeded | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.240 & 0.193 & 0.291 & 1.000 \\
+ELSST & seeded | All-MPNet-Base-v2 & seeded | BERT Base & 0.295 & 0.243 & 0.349 & 1.000 \\
+ELSST & seeded | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.180 & 0.134 & 0.231 & 1.000 \\
+ELSST & seeded | MPNet-Personality & seeded | BERT Base & 0.236 & 0.191 & 0.283 & 1.000 \\
+ELSST & seeded | SciBERT (SciVocab) & seeded | BERT Base & 0.055 & 0.015 & 0.096 & 0.996 \\
+APA & clustering | All-MPNet-Base-v2 & clustering | MPNet-Personality & -0.002 & -0.016 & 0.013 & 0.358 \\
+APA & clustering | All-MPNet-Base-v2 & clustering | SciBERT (SciVocab) & 0.197 & 0.177 & 0.217 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & clustering | BERT Base & 0.212 & 0.192 & 0.230 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & pairwise | All-MPNet-Base-v2 & -0.007 & -0.022 & 0.009 & 0.200 \\
+APA & clustering | All-MPNet-Base-v2 & pairwise | MPNet-Personality & 0.004 & -0.012 & 0.021 & 0.706 \\
+APA & clustering | All-MPNet-Base-v2 & pairwise | SciBERT (SciVocab) & 0.323 & 0.303 & 0.341 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & pairwise | BERT Base & 0.306 & 0.286 & 0.324 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & pairwise | Character 3-gram (baseline) & 0.171 & 0.151 & 0.190 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & seeded | All-MPNet-Base-v2 & 0.049 & 0.031 & 0.068 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & seeded | MPNet-Personality & 0.039 & 0.022 & 0.058 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.323 & 0.304 & 0.342 & 1.000 \\
+APA & clustering | All-MPNet-Base-v2 & seeded | BERT Base & 0.328 & 0.309 & 0.346 & 1.000 \\
+APA & clustering | MPNet-Personality & clustering | SciBERT (SciVocab) & 0.199 & 0.179 & 0.218 & 1.000 \\
+APA & clustering | MPNet-Personality & clustering | BERT Base & 0.214 & 0.197 & 0.233 & 1.000 \\
+APA & clustering | MPNet-Personality & pairwise | All-MPNet-Base-v2 & -0.005 & -0.021 & 0.011 & 0.301 \\
+APA & clustering | MPNet-Personality & pairwise | MPNet-Personality & 0.007 & -0.009 & 0.022 & 0.814 \\
+APA & clustering | MPNet-Personality & pairwise | SciBERT (SciVocab) & 0.325 & 0.305 & 0.345 & 1.000 \\
+APA & clustering | MPNet-Personality & pairwise | BERT Base & 0.308 & 0.289 & 0.326 & 1.000 \\
+APA & clustering | MPNet-Personality & pairwise | Character 3-gram (baseline) & 0.173 & 0.155 & 0.192 & 1.000 \\
+APA & clustering | MPNet-Personality & seeded | All-MPNet-Base-v2 & 0.051 & 0.032 & 0.071 & 1.000 \\
+APA & clustering | MPNet-Personality & seeded | MPNet-Personality & 0.042 & 0.025 & 0.059 & 1.000 \\
+APA & clustering | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.326 & 0.307 & 0.344 & 1.000 \\
+APA & clustering | MPNet-Personality & seeded | BERT Base & 0.331 & 0.312 & 0.349 & 1.000 \\
+APA & clustering | SciBERT (SciVocab) & clustering | BERT Base & 0.015 & 0.001 & 0.026 & 0.980 \\
+APA & clustering | SciBERT (SciVocab) & pairwise | All-MPNet-Base-v2 & -0.204 & -0.222 & -0.186 & 0.000 \\
+APA & clustering | SciBERT (SciVocab) & pairwise | MPNet-Personality & -0.193 & -0.212 & -0.174 & 0.000 \\
+APA & clustering | SciBERT (SciVocab) & pairwise | SciBERT (SciVocab) & 0.126 & 0.114 & 0.137 & 1.000 \\
+APA & clustering | SciBERT (SciVocab) & pairwise | BERT Base & 0.109 & 0.095 & 0.120 & 1.000 \\
+APA & clustering | SciBERT (SciVocab) & pairwise | Character 3-gram (baseline) & -0.026 & -0.041 & -0.012 & 0.001 \\
+APA & clustering | SciBERT (SciVocab) & seeded | All-MPNet-Base-v2 & -0.148 & -0.169 & -0.128 & 0.000 \\
+APA & clustering | SciBERT (SciVocab) & seeded | MPNet-Personality & -0.158 & -0.178 & -0.138 & 0.000 \\
+APA & clustering | SciBERT (SciVocab) & seeded | SciBERT (SciVocab) & 0.126 & 0.115 & 0.138 & 1.000 \\
+APA & clustering | SciBERT (SciVocab) & seeded | BERT Base & 0.131 & 0.119 & 0.143 & 1.000 \\
+APA & clustering | BERT Base & pairwise | All-MPNet-Base-v2 & -0.219 & -0.237 & -0.200 & 0.000 \\
+APA & clustering | BERT Base & pairwise | MPNet-Personality & -0.207 & -0.226 & -0.188 & 0.000 \\
+APA & clustering | BERT Base & pairwise | SciBERT (SciVocab) & 0.111 & 0.098 & 0.123 & 1.000 \\
+APA & clustering | BERT Base & pairwise | BERT Base & 0.094 & 0.082 & 0.107 & 1.000 \\
+APA & clustering | BERT Base & pairwise | Character 3-gram (baseline) & -0.041 & -0.055 & -0.026 & 0.000 \\
+APA & clustering | BERT Base & seeded | All-MPNet-Base-v2 & -0.163 & -0.182 & -0.143 & 0.000 \\
+APA & clustering | BERT Base & seeded | MPNet-Personality & -0.172 & -0.193 & -0.152 & 0.000 \\
+APA & clustering | BERT Base & seeded | SciBERT (SciVocab) & 0.112 & 0.100 & 0.124 & 1.000 \\
+APA & clustering | BERT Base & seeded | BERT Base & 0.117 & 0.106 & 0.129 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & pairwise | MPNet-Personality & 0.011 & -0.000 & 0.023 & 0.970 \\
+APA & pairwise | All-MPNet-Base-v2 & pairwise | SciBERT (SciVocab) & 0.330 & 0.311 & 0.347 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & pairwise | BERT Base & 0.313 & 0.295 & 0.329 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & pairwise | Character 3-gram (baseline) & 0.178 & 0.160 & 0.196 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & seeded | All-MPNet-Base-v2 & 0.056 & 0.043 & 0.069 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & seeded | MPNet-Personality & 0.046 & 0.031 & 0.062 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.330 & 0.312 & 0.347 & 1.000 \\
+APA & pairwise | All-MPNet-Base-v2 & seeded | BERT Base & 0.335 & 0.318 & 0.351 & 1.000 \\
+APA & pairwise | MPNet-Personality & pairwise | SciBERT (SciVocab) & 0.318 & 0.298 & 0.337 & 1.000 \\
+APA & pairwise | MPNet-Personality & pairwise | BERT Base & 0.302 & 0.282 & 0.319 & 1.000 \\
+APA & pairwise | MPNet-Personality & pairwise | Character 3-gram (baseline) & 0.167 & 0.148 & 0.185 & 1.000 \\
+APA & pairwise | MPNet-Personality & seeded | All-MPNet-Base-v2 & 0.044 & 0.030 & 0.061 & 1.000 \\
+APA & pairwise | MPNet-Personality & seeded | MPNet-Personality & 0.035 & 0.023 & 0.047 & 1.000 \\
+APA & pairwise | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.319 & 0.301 & 0.337 & 1.000 \\
+APA & pairwise | MPNet-Personality & seeded | BERT Base & 0.324 & 0.306 & 0.342 & 1.000 \\
+APA & pairwise | SciBERT (SciVocab) & pairwise | BERT Base & -0.017 & -0.026 & -0.008 & 0.000 \\
+APA & pairwise | SciBERT (SciVocab) & pairwise | Character 3-gram (baseline) & -0.152 & -0.166 & -0.138 & 0.000 \\
+APA & pairwise | SciBERT (SciVocab) & seeded | All-MPNet-Base-v2 & -0.274 & -0.293 & -0.253 & 0.000 \\
+APA & pairwise | SciBERT (SciVocab) & seeded | MPNet-Personality & -0.284 & -0.304 & -0.262 & 0.000 \\
+APA & pairwise | SciBERT (SciVocab) & seeded | SciBERT (SciVocab) & 0.001 & -0.003 & 0.005 & 0.677 \\
+APA & pairwise | SciBERT (SciVocab) & seeded | BERT Base & 0.006 & -0.000 & 0.012 & 0.970 \\
+APA & pairwise | BERT Base & pairwise | Character 3-gram (baseline) & -0.135 & -0.149 & -0.120 & 0.000 \\
+APA & pairwise | BERT Base & seeded | All-MPNet-Base-v2 & -0.257 & -0.276 & -0.237 & 0.000 \\
+APA & pairwise | BERT Base & seeded | MPNet-Personality & -0.267 & -0.286 & -0.245 & 0.000 \\
+APA & pairwise | BERT Base & seeded | SciBERT (SciVocab) & 0.018 & 0.010 & 0.027 & 1.000 \\
+APA & pairwise | BERT Base & seeded | BERT Base & 0.023 & 0.017 & 0.029 & 1.000 \\
+APA & pairwise | Character 3-gram (baseline) & seeded | All-MPNet-Base-v2 & -0.122 & -0.143 & -0.102 & 0.000 \\
+APA & pairwise | Character 3-gram (baseline) & seeded | MPNet-Personality & -0.132 & -0.152 & -0.112 & 0.000 \\
+APA & pairwise | Character 3-gram (baseline) & seeded | SciBERT (SciVocab) & 0.153 & 0.140 & 0.167 & 1.000 \\
+APA & pairwise | Character 3-gram (baseline) & seeded | BERT Base & 0.157 & 0.145 & 0.171 & 1.000 \\
+APA & seeded | All-MPNet-Base-v2 & seeded | MPNet-Personality & -0.010 & -0.027 & 0.008 & 0.146 \\
+APA & seeded | All-MPNet-Base-v2 & seeded | SciBERT (SciVocab) & 0.275 & 0.255 & 0.293 & 1.000 \\
+APA & seeded | All-MPNet-Base-v2 & seeded | BERT Base & 0.280 & 0.261 & 0.298 & 1.000 \\
+APA & seeded | MPNet-Personality & seeded | SciBERT (SciVocab) & 0.284 & 0.263 & 0.304 & 1.000 \\
+APA & seeded | MPNet-Personality & seeded | BERT Base & 0.289 & 0.269 & 0.309 & 1.000 \\
+APA & seeded | SciBERT (SciVocab) & seeded | BERT Base & 0.005 & -0.000 & 0.010 & 0.974 \\
+\bottomrule
+\end{tabular}
+\end{table}

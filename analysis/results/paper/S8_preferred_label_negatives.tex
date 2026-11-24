@@ -1,0 +1,38 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{F1 with all-label non-synonym pairs (main analysis) and with non-synonym pairs between preferred labels only, as in the submitted version.}
+\label{tab:S8_preferred_label_negatives}
+\begin{tabular}{lllrr}
+\toprule
+Dataset & Technique & Model & F1 (all-label negatives) & F1 (preferred-label negatives only) \\
+\midrule
+ELSST & Clustering & All-MPNet-Base-v2 & 0.508 & 0.586 \\
+ELSST & Clustering & MPNet-Personality & 0.487 & 0.572 \\
+ELSST & Clustering & SciBERT (SciVocab) & 0.327 & 0.395 \\
+ELSST & Clustering & BERT Base & 0.286 & 0.357 \\
+ELSST & Pairwise & All-MPNet-Base-v2 & 0.483 & 0.514 \\
+ELSST & Pairwise & MPNet-Personality & 0.453 & 0.485 \\
+ELSST & Pairwise & SciBERT (SciVocab) & 0.272 & 0.319 \\
+ELSST & Pairwise & BERT Base & 0.161 & 0.181 \\
+ELSST & Pairwise & Character 3-gram (baseline) & 0.203 & 0.222 \\
+ELSST & Seeded & All-MPNet-Base-v2 & 0.451 & 0.481 \\
+ELSST & Seeded & MPNet-Personality & 0.390 & 0.416 \\
+ELSST & Seeded & SciBERT (SciVocab) & 0.209 & 0.261 \\
+ELSST & Seeded & BERT Base & 0.159 & 0.197 \\
+APA & Clustering & All-MPNet-Base-v2 & 0.354 & 0.420 \\
+APA & Clustering & MPNet-Personality & 0.356 & 0.428 \\
+APA & Clustering & SciBERT (SciVocab) & 0.157 & 0.199 \\
+APA & Clustering & BERT Base & 0.142 & 0.190 \\
+APA & Pairwise & All-MPNet-Base-v2 & 0.361 & 0.436 \\
+APA & Pairwise & MPNet-Personality & 0.350 & 0.421 \\
+APA & Pairwise & SciBERT (SciVocab) & 0.031 & 0.134 \\
+APA & Pairwise & BERT Base & 0.048 & 0.067 \\
+APA & Pairwise & Character 3-gram (baseline) & 0.183 & 0.239 \\
+APA & Seeded & All-MPNet-Base-v2 & 0.310 & 0.378 \\
+APA & Seeded & MPNet-Personality & 0.315 & 0.371 \\
+APA & Seeded & SciBERT (SciVocab) & 0.029 & 0.073 \\
+APA & Seeded & BERT Base & 0.026 & 0.039 \\
+\bottomrule
+\end{tabular}
+\end{table}
