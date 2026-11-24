@@ -101,7 +101,7 @@ SEED_CLUSTER_PARAMS = {
 
 # The BEST_* values below are printed at the end of the three calibration notebooks
 # (pairwise_analysis, clustering_analysis, seed_clustering_analysis) and copied here.
-# The diagnostic notebooks compare them with the calibration CSV files and warn when they differ.
+# The diagnostic notebooks compare them with the calibration CSV files and stop when they differ.
 
 # ── Best HDBSCAN clustering parameters (from training grid search) on ELSST Training set ───────────
 BEST_CLUSTERING_PARAMS = {
@@ -113,21 +113,21 @@ BEST_CLUSTERING_PARAMS = {
 
 # ── Best pairwise cosine similarity thresholds (from training grid search) on ELSST Training set ───────────────────────────────
 BEST_PAIRWISE_THRESHOLDS = {
-    "all-mpnet-base-v2":              0.69,
-    "dwulff/mpnet-personality":       0.66,
-    "allenai/scibert_scivocab_uncased": 0.89,
-    "bert-base-uncased":              0.90,
+    "all-mpnet-base-v2":              0.74,
+    "dwulff/mpnet-personality":       0.71,
+    "allenai/scibert_scivocab_uncased": 0.90,
+    "bert-base-uncased":              0.91,
 }
 
 # Best Jaccard threshold of the character 3-gram baseline (from pairwise_analysis.ipynb)
-BEST_NGRAM_THRESHOLD = None
+BEST_NGRAM_THRESHOLD = 0.45
 
 # ── Best seeded clustering parameters (from training grid search) on ELSST Training set ────────────────────────────────────────
 BEST_SEEDED_PARAMS = {
-    "all-mpnet-base-v2":              {"n_initial_seeds": 250, "threshold": 0.70},
-    "dwulff/mpnet-personality":       {"n_initial_seeds": 10,  "threshold": 0.70},
-    "allenai/scibert_scivocab_uncased": {"n_initial_seeds": 250, "threshold": 0.85},
-    "bert-base-uncased":              {"n_initial_seeds": 250, "threshold": 0.85},
+    "all-mpnet-base-v2":              {"n_initial_seeds": 250, "threshold": 0.75},
+    "dwulff/mpnet-personality":       {"n_initial_seeds": 10,  "threshold": 0.75},
+    "allenai/scibert_scivocab_uncased": {"n_initial_seeds": 500, "threshold": 0.90},
+    "bert-base-uncased":              {"n_initial_seeds": 500, "threshold": 0.90},
 }
 
 NOISE_LEVELS = [0.0, 0.05, 0.1, 0.2, 0.3]
